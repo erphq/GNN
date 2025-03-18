@@ -25,21 +25,30 @@ class BaseProcessModel(nn.Module):
         """Forward pass - to be implemented by subclasses"""
         raise NotImplementedError("Subclasses must implement forward method")
     
-    def predict(self, g):
-        """Make predictions with a consistent interface"""
-        self.eval()
-        with torch.no_grad():
-            outputs = self.forward(g)
-            # Handle different output formats
-            if isinstance(outputs, dict):
-                logits = outputs.get("task_pred", next(iter(outputs.values())))
-            elif isinstance(outputs, tuple):
-                logits = outputs[0]
-            else:
-                logits = outputs
-            
-            _, predictions = torch.max(logits, dim=1)
-            return predictions
+    def predict(self, data):
+        """
+        Predict using the model.
+
+        Args:
+            data: Input data, can be a NumPy array or a DGL graph.
+
+        Returns:
+            Predicted labels.
+        """
+        # If data is a NumPy array, convert to graph
+        if isinstance(data, np.ndarray):
+            import dgl
+            import torch
+
+            # Create minimal graph
+            g = dgl.graph(([0], [0]))
+            g.ndata['feat'] = torch.tensor(data, dtype=torch.float32)
+        else:
+            g = data
+
+        outputs = self.forward(g)
+        _, predictions = torch.max(outputs['task_pred'], dim=1)
+        return predictions
     
     def get_embeddings(self, g):
         """Get embeddings from model - to be implemented by subclasses"""

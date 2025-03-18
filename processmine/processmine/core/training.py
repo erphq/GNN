@@ -236,29 +236,35 @@ def train_model(
                 # Forward pass with AMP
                 with autocast():
                     outputs = model(batch_graphs)
-                    
+
                     # Handle dictionary outputs
                     if isinstance(outputs, dict):
                         logits = outputs.get("task_pred", next(iter(outputs.values())))
-                        
+
                         # Check for diversity loss
                         diversity_loss = outputs.get("diversity_loss", 0.0)
                         diversity_weight = outputs.get("diversity_weight", 0.1)
-                        
+
                         # Compute task loss
                         loss = criterion(logits, labels)
-                        
+
                         # Add diversity loss if available
                         if torch.is_tensor(diversity_loss) and diversity_loss.numel() > 0:
                             loss = loss + diversity_loss * diversity_weight
                     else:
                         # Normal output
                         loss = criterion(outputs, labels)
-                    
-                    loss = loss * accumulation_factor  # Scale for accumulation
-                
+
+                    # Check if loss is a tuple
+                    if isinstance(loss, tuple):
+                        # Multiply only the tensor part of the tuple by the accumulation factor
+                        loss = (loss[0] * accumulation_factor, loss[1])  # Scale for accumulation
+                    else:
+                        loss = loss * accumulation_factor  # Scale for accumulation
+
                 # Backward pass with gradient scaling
-                scaler.scale(loss).backward()
+                scaler.scale(loss[0] if isinstance(loss, tuple) else loss).backward()
+
                 
                 # Accumulate loss for reporting
                 accumulated_loss += loss.item() * gradient_accumulation_steps
@@ -301,18 +307,37 @@ def train_model(
                     # Compute task loss
                     loss = criterion(logits, labels)
                     
+                    # Extract loss value if it's a tuple
+                    if isinstance(loss, tuple):
+                        loss_value = loss[0]
+                    else:
+                        loss_value = loss
+                    
                     # Add diversity loss if available
                     if torch.is_tensor(diversity_loss) and diversity_loss.numel() > 0:
-                        loss = loss + diversity_loss * diversity_weight
+                        combined_loss = loss_value + diversity_loss * diversity_weight
+                        
+                        # Reconstruct tuple if necessary
+                        if isinstance(loss, tuple):
+                            loss = (combined_loss, loss[1])
+                        else:
+                            loss = combined_loss
                 else:
                     # Normal output
                     loss = criterion(outputs, labels)
-                    
-                loss = loss * accumulation_factor  # Scale for accumulation
-                loss.backward()
+                                    
+                # Check if loss is a tuple
+                if isinstance(loss, tuple):
+                    # Multiply only the tensor part of the tuple by the accumulation factor
+                    loss = (loss[0] * accumulation_factor, loss[1])  # Scale for accumulation
+                    # Accumulate loss for reporting, use loss[0].item() to get the scalar value
+                    accumulated_loss += loss[0].item() * gradient_accumulation_steps
+                else:
+                    loss = loss * accumulation_factor  # Scale for accumulation
+                    # Accumulate loss for reporting, loss is already a scalar
+                    accumulated_loss += loss.item() * gradient_accumulation_steps
                 
-                # Accumulate loss for reporting
-                accumulated_loss += loss.item() * gradient_accumulation_steps
+                
                 
                 # Update weights every gradient_accumulation_steps
                 if (batch_idx + 1) % gradient_accumulation_steps == 0:
@@ -331,7 +356,7 @@ def train_model(
                     
                     # Update progress bar
                     if hasattr(train_iter, 'set_postfix'):
-                        train_iter.set_postfix({'loss': f"{loss.item() * gradient_accumulation_steps:.4f}"})
+                        train_iter.set_postfix({'loss': f"{loss[0].item() * gradient_accumulation_steps:.4f}"})
                     
                     global_step += 1
             
@@ -557,7 +582,7 @@ def evaluate_model(
             if criterion is not None and labels is not None:
                 loss = criterion(logits, labels)
                 batch_size = batch_graphs.batch_size
-                test_loss += loss.item() * batch_size
+                test_loss += loss[0].item() * batch_size
                 test_samples += batch_size
             
             # Get predicted classes

@@ -405,12 +405,18 @@ def run_training(
             
             # Create model with optimal parameters
             input_dim = len([col for col in df.columns if col.startswith("feat_")])
+            model_kwargs = kwargs.copy()
+            if 'input_dim' in model_kwargs:
+                model_kwargs.pop('input_dim')
+            if 'output_dim' in model_kwargs:
+                model_kwargs.pop('output_dim')
+            
+            # Now call create_model with explicit parameters
             model_instance = create_model(
-                model,
-                input_dim=input_dim,
-                output_dim=len(task_encoder.classes_),
-                **model_config
-            )
+                                    model,
+                                    input_dim=input_dim,  # Keep this if it exists in scope
+                                    **kwargs  # Just pass through kwargs without adding output_dim
+                                )
             
             # Prepare for training
             

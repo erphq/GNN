@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def create_model(model_type: str, **kwargs) -> Any:
     """
     Factory function to create models with consistent interface
-    
+
     Args:
         model_type: Type of model ('gnn', 'lstm', 'enhanced_gnn', 'xgboost', etc.)
         **kwargs: Model-specific parameters
@@ -21,7 +21,7 @@ def create_model(model_type: str, **kwargs) -> Any:
             - dropout: Dropout rate
             - attention_type: Attention mechanism ('basic', 'positional', 'diverse', 'combined')
             - use_positional_encoding: Whether to use positional encoding
-            - use_diverse_attention: Whether to use diverse attention 
+            - use_diverse_attention: Whether to use diverse attention
             - diversity_weight: Weight for diversity loss
             - pos_enc_dim: Positional encoding dimension
             - pooling: Graph pooling method
@@ -30,7 +30,7 @@ def create_model(model_type: str, **kwargs) -> Any:
             - use_layer_norm: Whether to use layer normalization
             - use_residual: Whether to use residual connections
             - mem_efficient: Whether to use memory-efficient implementation
-            
+
     Returns:
         Model instance
     """
@@ -40,12 +40,12 @@ def create_model(model_type: str, **kwargs) -> Any:
             raise ValueError(f"input_dim is required for {model_type} model")
         if 'output_dim' not in kwargs:
             raise ValueError(f"output_dim is required for {model_type} model")
-    
+
     # Handle special parameters and enhancements
     if model_type in ['gnn', 'enhanced_gnn']:
         # Process attention_type parameter
         attention_type = kwargs.get('attention_type')
-        
+
         # Handle use_positional_encoding override
         if 'use_positional_encoding' in kwargs:
             use_pos = kwargs.pop('use_positional_encoding')
@@ -59,7 +59,7 @@ def create_model(model_type: str, **kwargs) -> Any:
                 elif attention_type == 'combined':
                     attention_type = 'diverse'
                 kwargs['attention_type'] = attention_type
-        
+
         # Handle use_diverse_attention override
         if 'use_diverse_attention' in kwargs:
             use_diverse = kwargs.pop('use_diverse_attention')
@@ -76,7 +76,7 @@ def create_model(model_type: str, **kwargs) -> Any:
                 elif attention_type == 'combined':
                     attention_type = 'positional'
                 kwargs['attention_type'] = attention_type
-    
+
     # Create specific model based on type
     if model_type == 'gnn':
         from processmine.models.gnn.architectures import MemoryEfficientGNN
@@ -84,32 +84,32 @@ def create_model(model_type: str, **kwargs) -> Any:
             attention_type=kwargs.pop('attention_type', 'basic'),
             **kwargs
         )
-    
+
     elif model_type == 'enhanced_gnn':
         from processmine.models.gnn.architectures import MemoryEfficientGNN
         return MemoryEfficientGNN(
-            attention_type=kwargs.pop('attention_type', 'combined'), 
+            attention_type=kwargs.pop('attention_type', 'combined'),
             **kwargs
         )
-    
+
     elif model_type == 'positional_gnn':
         from processmine.models.gnn.architectures import MemoryEfficientGNN
         return MemoryEfficientGNN(
             attention_type='positional',
             **kwargs
         )
-    
+
     elif model_type == 'diverse_gnn':
         from processmine.models.gnn.architectures import MemoryEfficientGNN
         return MemoryEfficientGNN(
             attention_type='diverse',
             **kwargs
         )
-    
+
     elif model_type == 'gat_layer':
         # Direct use of GAT layer
         layer_type = kwargs.pop('layer_type', 'basic')
-        
+
         if layer_type == 'basic':
             from processmine.models.gnn.architectures import MemoryEfficientGATLayer
             return MemoryEfficientGATLayer(**kwargs)
@@ -127,59 +127,79 @@ def create_model(model_type: str, **kwargs) -> Any:
             return ExpressiveGATConv(**kwargs)
         else:
             raise ValueError(f"Unknown GAT layer type: {layer_type}")
-    
+
     elif model_type == 'lstm':
         from processmine.models.sequence.lstm import NextActivityLSTM
-        return NextActivityLSTM(
-            num_cls=kwargs.pop('output_dim'),  # Use output_dim as num_cls
-            **kwargs
-        )
         
+        # Create a clean copy of kwargs
+        lstm_kwargs = kwargs.copy()
+        
+        # Ensure num_cls is set correctly
+        if 'output_dim' in lstm_kwargs:
+            lstm_kwargs['num_cls'] = lstm_kwargs.pop('output_dim')
+            
+        # Remove input_dim if it exists (not accepted by NextActivityLSTM)
+        if 'input_dim' in lstm_kwargs:
+            lstm_kwargs.pop('input_dim')
+        
+        # Create the model with cleaned parameters
+        return NextActivityLSTM(**lstm_kwargs)
+
     elif model_type == 'enhanced_lstm':
         from processmine.models.sequence.lstm import EnhancedProcessRNN
-        return EnhancedProcessRNN(
-            num_cls=kwargs.pop('output_dim'),  # Use output_dim as num_cls
-            **kwargs
-        )
         
+        # Create a clean copy of kwargs
+        lstm_kwargs = kwargs.copy()
+        
+        # Ensure num_cls is set correctly
+        if 'output_dim' in lstm_kwargs:
+            lstm_kwargs['num_cls'] = lstm_kwargs.pop('output_dim')
+            
+        # Remove input_dim if it exists (if not accepted)
+        if 'input_dim' in lstm_kwargs:
+            lstm_kwargs.pop('input_dim')
+        
+        # Create the model with cleaned parameters
+        return EnhancedProcessRNN(**lstm_kwargs)
+
     elif model_type == 'mlp':
         from processmine.models.baseline.mlp import BasicMLP
-        
+
         # Extract hidden_dims as a list from hidden_dim if not provided
         if 'hidden_dims' not in kwargs and 'hidden_dim' in kwargs:
             hidden_dim = kwargs.pop('hidden_dim')
             num_layers = kwargs.pop('num_layers', 2)
             hidden_dims = [hidden_dim] * num_layers
             kwargs['hidden_dims'] = hidden_dims
-            
+
         return BasicMLP(**kwargs)
-        
+
     elif model_type == 'random_forest':
         from sklearn.ensemble import RandomForestClassifier
         return RandomForestClassifier(**kwargs)
-        
+
     elif model_type == 'xgboost':
         try:
             import xgboost as xgb
             return xgb.XGBClassifier(**kwargs)
         except ImportError:
             raise ImportError("XGBoost is not installed. Install it with: pip install xgboost")
-            
+
     elif model_type == 'decision_tree':
         from sklearn.tree import DecisionTreeClassifier
         return DecisionTreeClassifier(**kwargs)
-    
+
     elif model_type == 'process_loss':
         from processmine.models.gnn.architectures import ProcessLoss
         return ProcessLoss(**kwargs)
-    
+
     elif model_type == 'positional_encoding':
         from processmine.models.gnn.architectures import PositionalEncoding
         return PositionalEncoding(**kwargs)
-        
+
     else:
         raise ValueError(f"Unknown model type: {model_type}")
-
+    
 def get_model_config(model_type: str) -> Dict[str, Any]:
     """
     Get default configuration for a model type
