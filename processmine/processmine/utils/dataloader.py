@@ -97,16 +97,22 @@ def get_batch_graphs_from_indices(graphs, indices):
     
     Args:
         graphs: List of DGL graphs
-        indices: List of indices to extract
+        indices: List or NumPy array of indices to extract
         
     Returns:
         List of DGL graphs at the specified indices
     """
+    import dgl
+    
     if not isinstance(graphs, list):
         raise TypeError(f"Expected list of graphs, got {type(graphs)}")
     
     if len(graphs) == 0:
         raise ValueError("Empty graph list provided")
+    
+    # Convert NumPy array to list if needed
+    if isinstance(indices, np.ndarray):
+        indices = indices.tolist()
     
     # Check if indices are valid
     max_idx = max(indices) if indices else -1
