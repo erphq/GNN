@@ -147,7 +147,7 @@ class MemoryEfficientGNN(BaseProcessModel):
         self.heads = heads
         self.dropout = dropout
         self.attention_type = attention_type
-        self.pos_enc_dim = pos_enc_dim
+        self.pos_dim = pos_enc_dim
         self.diversity_weight = diversity_weight
         self.pooling_type = pooling
         self.predict_time = predict_time
@@ -159,12 +159,13 @@ class MemoryEfficientGNN(BaseProcessModel):
         self.mem_efficient = mem_efficient
         
         # Enhanced input transformation
-        if attention_type == "positional" or attention_type == "combined":
+        if attention_type in ["positional", "combined"]:
             # Positional encoding will be added to input
             self.pos_encoder = nn.Linear(2, pos_enc_dim)
             input_with_pos = input_dim + pos_enc_dim
         else:
             input_with_pos = input_dim
+            self.pos_encoder = None
         
         # Create GNN layers
         self.convs = nn.ModuleList()
@@ -179,10 +180,7 @@ class MemoryEfficientGNN(BaseProcessModel):
         # Create hidden layers
         for i in range(1, num_layers):
             # Calculate input size for this layer
-            if attention_type in ["basic", "positional"]:
-                current_input_dim = hidden_dim * heads
-            else:
-                current_input_dim = hidden_dim * heads
+            current_input_dim = hidden_dim * heads
             
             self.convs.append(self._create_conv_layer(
                 current_input_dim, 
@@ -236,7 +234,6 @@ class MemoryEfficientGNN(BaseProcessModel):
         
         # Storage for attention weights
         self.attention_weights = None
-
     
     def _set_pooling_func(self, pooling_type):
         """
@@ -265,7 +262,7 @@ class MemoryEfficientGNN(BaseProcessModel):
         else:
             # Default to mean pooling
             return lambda g, h: dgl.mean_nodes(g, 'h')
-            
+    
     def _attention_pooling(self, g, h):
         """
         Attention-based pooling
@@ -293,7 +290,7 @@ class MemoryEfficientGNN(BaseProcessModel):
         # Sum over nodes
         import dgl
         return dgl.sum_nodes(g, 'h_weighted')
-        
+    
     def _combined_pooling(self, g, h):
         """
         Combined pooling (mean, max, and sum)
@@ -319,7 +316,6 @@ class MemoryEfficientGNN(BaseProcessModel):
         
         # Project to original dimension
         return self.pool_proj(combined)
-    
     
     def _create_conv_layer(self, in_dim, out_dim, first_layer=False):
         """
@@ -347,7 +343,7 @@ class MemoryEfficientGNN(BaseProcessModel):
                 in_dim=in_dim,
                 out_dim=out_dim,
                 num_heads=self.heads,
-                pos_dim=self.pos_enc_dim,
+                pos_dim=self.pos_dim,
                 feat_drop=self.dropout,
                 residual=self.use_residual
             )
@@ -365,15 +361,14 @@ class MemoryEfficientGNN(BaseProcessModel):
                 in_dim=in_dim,
                 out_dim=out_dim,
                 num_heads=self.heads,
-                pos_dim=self.pos_enc_dim,
+                pos_dim=self.pos_dim,
                 diversity_weight=self.diversity_weight,
                 feat_drop=self.dropout,
                 residual=self.use_residual
             )
         else:
             raise ValueError(f"Unknown attention type: {self.attention_type}")
-
-    # Add the missing method _generate_positions for positional encoding
+    
     def _generate_positions(self, g):
         """
         Generate positional encodings for nodes in graph
@@ -388,7 +383,7 @@ class MemoryEfficientGNN(BaseProcessModel):
         device = g.device if hasattr(g, 'device') else next(self.parameters()).device
         
         # For batched graphs, handle each graph separately
-        if hasattr(g, 'batch_num_nodes') and hasattr(g, 'batch_size') and g.batch_size > 1:
+        if hasattr(g, 'batch_num_nodes') and g.batch_size > 1:
             batch_num_nodes = g.batch_num_nodes()
             positions = torch.zeros(num_nodes, 2, device=device)
             
@@ -415,22 +410,44 @@ class MemoryEfficientGNN(BaseProcessModel):
         
         return positions
     
-    
     def forward(self, g):
         """
         Forward pass for the GNN model
         
         Args:
-            g: DGL graph or batched graph
+            g: DGL graph or batched graph, or tensor features
             
         Returns:
             Dictionary with model outputs
         """
+        # Handle different input types
+        if not hasattr(g, 'ndata'):
+            # Input is tensor data, not a graph
+            # Convert to minimal graph for processing
+            import dgl
+            
+            # For batched input
+            if g.dim() > 2:
+                batch_size = g.size(0)
+                graphs = []
+                for i in range(batch_size):
+                    # Create a single-node graph for each item in batch
+                    temp_g = dgl.graph(([0], [0]))
+                    temp_g.ndata['feat'] = g[i].unsqueeze(0)  # Add batch dimension
+                    graphs.append(temp_g)
+                # Batch the graphs
+                g = dgl.batch(graphs)
+            else:
+                # Single input - create a minimal graph
+                single_g = dgl.graph(([0], [0]))
+                single_g.ndata['feat'] = g.unsqueeze(0)  # Add batch dimension
+                g = single_g
+        
         # Get node features
         h = g.ndata['feat']
         
         # Handle positional encodings if needed
-        if self.attention_type in ["positional", "combined"]:
+        if self.attention_type in ["positional", "combined"] and self.pos_encoder is not None:
             pos = self._generate_positions(g)
             pos_embedding = self.pos_encoder(pos)
             h = torch.cat([h, pos_embedding], dim=-1)
@@ -440,12 +457,14 @@ class MemoryEfficientGNN(BaseProcessModel):
         diversity_losses = []  # Store diversity losses if needed
         
         for i, conv in enumerate(self.convs):
-            # Apply convolutional layer
+            # Apply convolutional layer with appropriate handling for each type
             if self.attention_type in ["diverse", "combined"]:
+                # These layers return diversity loss and attention weights
                 h_new, diversity_loss, attn = conv(g, h, return_attention=True)
                 diversity_losses.append(diversity_loss)
                 attn_weights.append(attn)
             else:
+                # Other layers may optionally return attention weights
                 if hasattr(conv, 'return_attention_weights'):
                     h_new, attn = conv(g, h, return_attention_weights=True)
                     attn_weights.append(attn)
@@ -454,7 +473,9 @@ class MemoryEfficientGNN(BaseProcessModel):
             
             # Apply normalization if enabled
             if self.norms is not None:
-                h_new = self.norms[i](h_new)
+                # Reshape for batch normalization
+                shape_before = h_new.shape
+                h_new = self.norms[i](h_new.reshape(-1, shape_before[-1])).reshape(shape_before)
             
             # Apply activation
             h_new = F.elu(h_new)
@@ -492,6 +513,31 @@ class MemoryEfficientGNN(BaseProcessModel):
         
         return output
     
+    def predict(self, data):
+        """
+        Make predictions on input data with flexible input handling
+        
+        Args:
+            data: Input data, can be tensor features or DGL graph
+            
+        Returns:
+            Predicted class indices
+        """
+        # Put model in evaluation mode
+        self.eval()
+        
+        with torch.no_grad():
+            # Forward pass with appropriate input handling
+            outputs = self.forward(data)
+            
+            # Extract task predictions
+            task_logits = outputs["task_pred"]
+            
+            # Get predicted classes
+            _, predictions = torch.max(task_logits, dim=1)
+            
+            return predictions
+    
     def _init_weights(self):
         """Initialize network weights with Xavier uniform initialization"""
         for m in self.modules():
@@ -515,11 +561,34 @@ class MemoryEfficientGNN(BaseProcessModel):
         """
         self.eval()
         with torch.no_grad():
+            # Handle different input types
+            if not hasattr(g, 'ndata'):
+                # Input is tensor data, not a graph
+                # Convert to minimal graph for processing
+                import dgl
+                
+                # For batched input
+                if g.dim() > 2:
+                    batch_size = g.size(0)
+                    graphs = []
+                    for i in range(batch_size):
+                        # Create a single-node graph for each item in batch
+                        temp_g = dgl.graph(([0], [0]))
+                        temp_g.ndata['feat'] = g[i].unsqueeze(0)  # Add batch dimension
+                        graphs.append(temp_g)
+                    # Batch the graphs
+                    g = dgl.batch(graphs)
+                else:
+                    # Single input - create a minimal graph
+                    single_g = dgl.graph(([0], [0]))
+                    single_g.ndata['feat'] = g.unsqueeze(0)  # Add batch dimension
+                    g = single_g
+            
             # Get node features
             h = g.ndata['feat']
             
             # Handle positional encodings
-            if self.attention_type in ["positional", "combined"]:
+            if self.attention_type in ["positional", "combined"] and self.pos_encoder is not None:
                 pos = self._generate_positions(g)
                 pos_embedding = self.pos_encoder(pos)
                 h = torch.cat([h, pos_embedding], dim=-1)
@@ -537,13 +606,15 @@ class MemoryEfficientGNN(BaseProcessModel):
                 
                 # Apply normalization if enabled
                 if self.norms is not None:
-                    h = self.norms[i](h)
+                    # Reshape for batch normalization
+                    shape_before = h.shape
+                    h = self.norms[i](h.reshape(-1, shape_before[-1])).reshape(shape_before)
                 
                 # Apply activation
                 h = F.elu(h)
             
             # For batched graph, get graph IDs
-            if g.batch_size > 1:
+            if hasattr(g, 'batch_size') and g.batch_size > 1:
                 # Create graph ID mapping (which node belongs to which graph)
                 graph_ids = []
                 offset = 0
@@ -627,9 +698,11 @@ class MemoryEfficientGATLayer(nn.Module):
         # Return message and attention weight
         return {'m': edges.src['ft'], 'e': e}
     
+    # Fix for MemoryEfficientGATLayer.forward in architectures.py
+
     def forward(self, g, feat, return_attention_weights=False):
         """
-        Forward computation
+        Fixed forward computation with dimension compatibility checks
         
         Args:
             g: DGL graph or batched graph
@@ -657,8 +730,17 @@ class MemoryEfficientGATLayer(nn.Module):
         # Apply softmax to attention weights (grouped by destination node)
         g.edata['a'] = dgl.ops.edge_softmax(g, g.edata['e'])
         
-        # Message passing
-        g.update_all(fn.u_mul_e('ft', 'a', 'm'), fn.sum('m', 'ft'))
+        # Reshape attention for proper broadcasting
+        # Shape from [E, H] to [E, H, 1] for broadcasting with node features [E, H, D]
+        if 'a' in g.edata and g.edata['a'].dim() == 2:
+            g.edata['a'] = g.edata['a'].unsqueeze(-1)
+        
+        # Message passing with proper shape handling
+        g.update_all(
+            # Properly broadcast attention weights with node features
+            lambda edges: {'m': edges.src['ft'] * edges.data['a']},
+            fn.sum('m', 'ft')
+        )
         
         # Get the updated features
         h = g.ndata['ft']
@@ -1153,9 +1235,11 @@ class CombinedGATLayer(nn.Module):
         if self.res_fc is not None:
             nn.init.xavier_uniform_(self.res_fc.weight)
     
+    # Fix for CombinedGATLayer.forward in architectures.py
+
     def forward(self, g, feat, return_attention=False):
         """
-        Forward pass with combined positional and diverse attention
+        Fixed forward pass with combined positional and diverse attention
         
         Args:
             g: DGL graph or batched graph
@@ -1214,12 +1298,16 @@ class CombinedGATLayer(nn.Module):
         # Apply softmax to attention weights (per dst node)
         g.edata['a'] = dgl.ops.edge_softmax(g, g.edata['e'])
         
-        # Reshape attention for broadcasting with content features
-        # a: [num_edges, num_heads] -> [num_edges, num_heads, 1]
-        g.edata['a'] = g.edata['a'].unsqueeze(-1)
+        # Reshape attention for broadcasting: [E, H] -> [E, H, 1]
+        if 'a' in g.edata and g.edata['a'].dim() == 2:
+            g.edata['a'] = g.edata['a'].unsqueeze(-1)
         
         # Message passing with properly shaped attention
-        g.update_all(fn.u_mul_e('content', 'a', 'm'), fn.sum('m', 'ft'))
+        g.update_all(
+            # Use lambda for correct broadcasting
+            lambda edges: {'m': edges.src['content'] * edges.data['a']},
+            fn.sum('m', 'ft')
+        )
         
         # Get the updated features
         h = g.ndata['ft']
@@ -1249,7 +1337,7 @@ class CombinedGATLayer(nn.Module):
         
         # Return with diversity loss and attention weights if requested
         if return_attention:
-            return h, diversity_loss, g.edata['a']
+            return h, diversity_loss, g.edata['a'].squeeze(-1) if g.edata['a'].dim() > 2 else g.edata['a']
         else:
             return h, diversity_loss
     

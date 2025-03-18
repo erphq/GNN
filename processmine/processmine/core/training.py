@@ -17,6 +17,21 @@ from sklearn.metrics import (
 
 logger = logging.getLogger(__name__)
 
+
+def _get_loss_display_value(loss, gradient_accumulation_steps):
+    """Safely extract loss value for display, handling various loss formats"""
+    if isinstance(loss, tuple):
+        # If loss is a tuple, use the first element
+        if isinstance(loss[0], torch.Tensor):
+            return loss[0].item() * gradient_accumulation_steps
+        return loss[0] * gradient_accumulation_steps
+    elif isinstance(loss, torch.Tensor):
+        # If loss is a tensor, use item() to get scalar value
+        return loss.item() * gradient_accumulation_steps
+    else:
+        # If loss is already a scalar
+        return loss * gradient_accumulation_steps
+
 class MemoryTracker:
     """Utility class to track memory usage during training"""
     
@@ -289,7 +304,8 @@ def train_model(
                     
                     # Update progress bar
                     if hasattr(train_iter, 'set_postfix'):
-                        train_iter.set_postfix({'loss': f"{loss.item() * gradient_accumulation_steps:.4f}"})
+                        loss_display = _get_loss_display_value(loss, gradient_accumulation_steps)
+                        train_iter.set_postfix({'loss': f"{loss_display:.4f}"})
                     
                     global_step += 1
             else:
@@ -356,7 +372,8 @@ def train_model(
                     
                     # Update progress bar
                     if hasattr(train_iter, 'set_postfix'):
-                        train_iter.set_postfix({'loss': f"{loss[0].item() * gradient_accumulation_steps:.4f}"})
+                        loss_display = _get_loss_display_value(loss, gradient_accumulation_steps)
+                        train_iter.set_postfix({'loss': f"{loss_display:.4f}"})
                     
                     global_step += 1
             
