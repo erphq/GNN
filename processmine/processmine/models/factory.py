@@ -3,9 +3,34 @@ Factory module for creating model instances with a consistent interface.
 """
 
 import logging
+import numpy as np
 from typing import Any, Dict, Optional, Union, List
 
 logger = logging.getLogger(__name__)
+
+def ensure_continuous_labels(labels):
+    """
+    Ensure class labels are continuous integers starting from 0.
+    
+    Args:
+        labels: Array of labels
+    
+    Returns:
+        tuple of (remapped_labels, mapping_dict, reverse_mapping_dict)
+    """
+    unique_classes = np.sort(np.unique(labels))
+    class_mapping = {old_cls: i for i, old_cls in enumerate(unique_classes)}
+    reverse_mapping = {i: old_cls for old_cls, i in class_mapping.items()}
+    
+    # Apply mapping to create continuous labels
+    if hasattr(labels, 'tolist'):
+        # For numpy arrays or tensors
+        remapped = np.array([class_mapping[lbl] for lbl in labels.tolist()])
+    else:
+        # For lists
+        remapped = np.array([class_mapping[lbl] for lbl in labels])
+    
+    return remapped, class_mapping, reverse_mapping
 
 def create_model(model_type: str, **kwargs) -> Any:
     """
@@ -37,17 +62,22 @@ def create_model(model_type: str, **kwargs) -> Any:
     # Create a clean copy of kwargs to avoid modifying the original
     model_kwargs = kwargs.copy()
     
-    # Check required parameters for neural models
-    if model_type in ['gnn', 'enhanced_gnn', 'positional_gnn', 'diverse_gnn']:
-        if 'input_dim' not in model_kwargs:
-            raise ValueError(f"input_dim is required for {model_type} model")
+    # Standardize parameters across all models
+    # Map num_cls to output_dim and vice versa for consistency
+    if 'num_cls' in model_kwargs and 'output_dim' not in model_kwargs:
+        model_kwargs['output_dim'] = model_kwargs['num_cls']
+    elif 'output_dim' in model_kwargs and 'num_cls' not in model_kwargs:
+        model_kwargs['num_cls'] = model_kwargs['output_dim']
+    
+    # Check required parameters for all models
+    if model_type in ['gnn', 'enhanced_gnn', 'positional_gnn', 'diverse_gnn', 'lstm', 'enhanced_lstm']:
+        # All neural models need output_dim
         if 'output_dim' not in model_kwargs:
             raise ValueError(f"output_dim is required for {model_type} model")
-
-    # Standardize parameter names
-    # Map num_cls to output_dim for LSTM models if output_dim not already present
-    if model_type in ['lstm', 'enhanced_lstm'] and 'num_cls' in model_kwargs and 'output_dim' not in model_kwargs:
-        model_kwargs['output_dim'] = model_kwargs['num_cls']
+        
+        # All models except LSTM need input_dim
+        if model_type not in ['lstm', 'enhanced_lstm'] and 'input_dim' not in model_kwargs:
+            raise ValueError(f"input_dim is required for {model_type} model")
 
     # Handle special parameters and enhancements for GNN models
     if model_type in ['gnn', 'enhanced_gnn', 'positional_gnn', 'diverse_gnn']:
@@ -84,6 +114,9 @@ def create_model(model_type: str, **kwargs) -> Any:
                 elif attention_type == 'combined':
                     attention_type = 'positional'
                 model_kwargs['attention_type'] = attention_type
+                
+        # Remove model_type if present to avoid duplicate kwargs
+        model_kwargs.pop('model_type', None)
 
     # Create specific model based on type
     if model_type == 'gnn':
@@ -140,21 +173,22 @@ def create_model(model_type: str, **kwargs) -> Any:
         from processmine.models.sequence.lstm import NextActivityLSTM
         
         # Create a clean copy of kwargs
-        lstm_kwargs = kwargs.copy()
+        lstm_kwargs = model_kwargs.copy()
         
-        # Ensure num_cls is set correctly (can come from either output_dim or num_cls)
+        # Make sure required parameters are present
+        if 'num_cls' not in lstm_kwargs and 'output_dim' not in lstm_kwargs:
+            raise ValueError(f"output_dim or num_cls is required for {model_type} model")
+            
+        # Standardize parameter names for LSTM
         if 'output_dim' in lstm_kwargs and 'num_cls' not in lstm_kwargs:
             lstm_kwargs['num_cls'] = lstm_kwargs.pop('output_dim')
         
-        # Remove any parameters not accepted by NextActivityLSTM
+        # Remove any parameters not accepted by NextActivityLSTM to avoid errors
         valid_params = ['num_cls', 'emb_dim', 'hidden_dim', 'num_layers', 'dropout', 
-                        'bidirectional', 'use_attention', 'use_layer_norm', 'mem_efficient']
+                        'bidirectional', 'use_attention', 'use_layer_norm', 'mem_efficient',
+                        'input_dim']
         
         lstm_kwargs = {k: v for k, v in lstm_kwargs.items() if k in valid_params}
-        
-        # Check if num_cls is present
-        if 'num_cls' not in lstm_kwargs:
-            raise ValueError(f"num_cls or output_dim is required for {model_type} model")
         
         # Create the model with cleaned parameters
         return NextActivityLSTM(**lstm_kwargs)
@@ -163,22 +197,22 @@ def create_model(model_type: str, **kwargs) -> Any:
         from processmine.models.sequence.lstm import EnhancedProcessRNN
         
         # Create a clean copy of kwargs
-        lstm_kwargs = kwargs.copy()
+        lstm_kwargs = model_kwargs.copy()
         
-        # Ensure num_cls is set correctly (can come from either output_dim or num_cls)
+        # Make sure required parameters are present
+        if 'num_cls' not in lstm_kwargs and 'output_dim' not in lstm_kwargs:
+            raise ValueError(f"output_dim or num_cls is required for {model_type} model")
+        
+        # Standardize parameter names for LSTM
         if 'output_dim' in lstm_kwargs and 'num_cls' not in lstm_kwargs:
             lstm_kwargs['num_cls'] = lstm_kwargs.pop('output_dim')
         
         # Remove any parameters not accepted by EnhancedProcessRNN
         valid_params = ['num_cls', 'emb_dim', 'hidden_dim', 'num_layers', 'dropout',
-                        'use_gru', 'use_transformer', 'num_heads', 'use_time_features',
-                        'time_encoding_dim', 'mem_efficient']
+                         'use_gru', 'use_transformer', 'num_heads', 'use_time_features',
+                         'time_encoding_dim', 'mem_efficient', 'input_dim']
         
         lstm_kwargs = {k: v for k, v in lstm_kwargs.items() if k in valid_params}
-        
-        # Check if num_cls is present
-        if 'num_cls' not in lstm_kwargs:
-            raise ValueError(f"num_cls or output_dim is required for {model_type} model")
         
         # Create the model with cleaned parameters
         return EnhancedProcessRNN(**lstm_kwargs)
@@ -202,7 +236,11 @@ def create_model(model_type: str, **kwargs) -> Any:
     elif model_type == 'xgboost':
         try:
             import xgboost as xgb
-            return xgb.XGBClassifier(**model_kwargs)
+            # Add class_map attributes to the model for handling non-continuous labels
+            classifier = xgb.XGBClassifier(**model_kwargs)
+            classifier.class_mapping = None
+            classifier.reverse_mapping = None
+            return classifier
         except ImportError:
             raise ImportError("XGBoost is not installed. Install it with: pip install xgboost")
 

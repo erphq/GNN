@@ -579,7 +579,8 @@ def evaluate_model(
     with torch.no_grad():
         for batch_graphs in progress_bar:
             # Move batch to device
-            batch_graphs = batch_graphs.to(device)
+            if hasattr(batch_graphs, 'to'):
+                batch_graphs = batch_graphs.to(device)
             
             # Get labels from the graph
             labels = get_graph_targets(batch_graphs)
@@ -598,8 +599,19 @@ def evaluate_model(
             # Calculate loss if criterion provided
             if criterion is not None and labels is not None:
                 loss = criterion(logits, labels)
-                batch_size = batch_graphs.batch_size
-                test_loss += loss[0].item() * batch_size
+                batch_size = batch_graphs.batch_size if hasattr(batch_graphs, 'batch_size') else len(labels)
+                
+                # Handle different types of loss values (scalar, tensor, tuple)
+                if isinstance(loss, tuple):
+                    loss_value = loss[0]
+                else:
+                    loss_value = loss
+                
+                # Extract scalar value carefully
+                if hasattr(loss_value, 'item'):
+                    loss_value = loss_value.item()
+                
+                test_loss += loss_value * batch_size
                 test_samples += batch_size
             
             # Get predicted classes
@@ -624,8 +636,8 @@ def evaluate_model(
     metrics = _calculate_metrics(all_labels, all_preds, detailed)
     
     # Add loss if calculated
-    if test_loss is not None:
-        avg_test_loss = test_loss / max(test_samples, 1) if test_samples > 0 else 0.0
+    if test_loss is not None and test_samples > 0:
+        avg_test_loss = test_loss / test_samples
         metrics['test_loss'] = avg_test_loss
     
     # Log summary of results if not during training

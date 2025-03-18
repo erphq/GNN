@@ -298,6 +298,7 @@ def run_training(
     save_graphs: bool = False,
     dgl_sampling: str = "neighbor",
     use_edge_features: bool = True,
+    input_dim: Optional[int] = None,  # Added explicit input_dim parameter
     **kwargs
 ) -> Dict[str, Any]:
     """
@@ -319,6 +320,7 @@ def run_training(
         save_graphs: Whether to save processed DGL graphs
         dgl_sampling: Graph sampling method for large graphs
         use_edge_features: Whether to use edge features
+        input_dim: Optional explicit input dimension (to avoid duplication)
         **kwargs: Additional model-specific arguments
 
     Returns:
@@ -358,7 +360,7 @@ def run_training(
             train_model, evaluate_model, create_optimizer,
             create_lr_scheduler, compute_class_weights
         )
-        from processmine.models.factory import create_model, get_model_config
+        from processmine.models.factory import create_model, get_model_config, ensure_continuous_labels
         from processmine.utils.dataloader import get_graph_dataloader
 
         # Load data if not provided from analysis
@@ -384,6 +386,13 @@ def run_training(
         # Get model default config and update with kwargs
         model_config = get_model_config(model)
         model_config.update(kwargs)
+
+        # If input_dim is explicitly provided, use it (avoids duplication issue)
+        if input_dim is not None:
+            model_config['input_dim'] = input_dim
+            
+        # Make sure model_type is not in kwargs to avoid conflicts
+        model_config.pop('model_type', None)
 
         if model in ["gnn", "enhanced_gnn", "positional_gnn", "diverse_gnn"]:
             # Check for pre-processed graphs
@@ -417,18 +426,19 @@ def run_training(
                     graph_save_path = str(output_dir / "graphs" / "processed_graphs.bin")
                     logger.info(f"Saving processed DGL graphs to {graph_save_path}")
                     try:
-                        save_graphs(graph_save_path, graphs)
+                        dgl.save_graphs(graph_save_path, graphs)
                         logger.info(f"Saved {len(graphs)} DGL graphs")
                     except Exception as e:
                         logger.warning(f"Failed to save graphs: {e}")
 
             # Create model with optimal parameters
-            input_dim = len([col for col in df.columns if col.startswith("feat_")])
-            output_dim = len(task_encoder.classes_)
-
-            # Add these dimensions to the model config
-            model_config['input_dim'] = input_dim
-            model_config['output_dim'] = output_dim
+            if 'input_dim' not in model_config:
+                input_dim = len([col for col in df.columns if col.startswith("feat_")])
+                model_config['input_dim'] = input_dim
+                
+            if 'output_dim' not in model_config:
+                output_dim = len(task_encoder.classes_)
+                model_config['output_dim'] = output_dim
 
             # Now create model with a single set of parameters
             model_instance = create_model(model, **model_config)
@@ -436,11 +446,16 @@ def run_training(
             # Split indices with stratification for graph classification tasks
             try:
                 # Extract GRAPH-LEVEL labels for stratification (common in DGL graph classification)
-                # Adjust attribute name if your dataset uses different field (e.g., 'label', 'y', etc.)
-                graph_labels = [g.ndata['graph_label'][0].item() for g in graphs]  # Common pattern if using node data for graph labels
-                # Alternative if using proper graph attributes:
-                # graph_labels = [g.graph['label'].item() for g in graphs]
-
+                graph_labels = []
+                for g in graphs:
+                    if 'graph_label' in g.ndata:
+                        graph_labels.append(g.ndata['graph_label'][0].item())
+                    elif 'label' in g.ndata:
+                        graph_labels.append(g.ndata['label'][0].item())
+                    else:
+                        # Handle case with no explicit graph-level label
+                        raise KeyError("No suitable graph label found")
+                
                 from sklearn.model_selection import train_test_split
 
                 # First split: 70% train, 30% temp (val+test)
@@ -541,7 +556,17 @@ def run_training(
             class_weights = class_weights.to(device)
 
             # Create loss function with class weights
-            criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+            if 'use_multi_objective_loss' in kwargs and kwargs['use_multi_objective_loss']:
+                # Use ProcessLoss for combined task, time, and structure prediction
+                from processmine.models.gnn.architectures import ProcessLoss
+                criterion = ProcessLoss(
+                    task_weight=kwargs.get('task_weight', 0.5),
+                    time_weight=kwargs.get('time_weight', 0.3),
+                    structure_weight=kwargs.get('structure_weight', 0.2)
+                )
+            else:
+                # Standard cross entropy loss
+                criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
             # Create optimizer
             optimizer = create_optimizer(
@@ -940,34 +965,30 @@ def run_training(
             X = df[feature_cols].values
             y = df["next_task"].values
 
-            # Ensure consistent class labels with LabelEncoder
+            # Ensure continuous class labels with LabelEncoder
             from sklearn.preprocessing import LabelEncoder
-            label_encoder = LabelEncoder()
-            y_encoded = label_encoder.fit_transform(y)
+            y_mapped, class_mapping, reverse_mapping = ensure_continuous_labels(y)
 
             # Update class count for XGBoost
             if model == "xgboost":
-                model_config["num_class"] = len(label_encoder.classes_)
+                model_config["num_class"] = len(np.unique(y_mapped))
 
             # Split data
             from sklearn.model_selection import train_test_split
 
-            X_train, X_temp, y_train, y_temp = train_test_split(X, y_encoded, test_size=0.3, random_state=seed)
+            X_train, X_temp, y_train, y_temp = train_test_split(X, y_mapped, test_size=0.3, random_state=seed)
             X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=seed)
 
-            # For XGBoost or tree models, ensure continuous class labels
-            if model in ['xgboost', 'random_forest', 'decision_tree']:
-                y_continuous, class_mapping, reverse_mapping = ensure_continuous_labels(y_train)
-                # Store mapping in model for later prediction
-                model_instance = create_model(model, **model_config)
+            # Create model
+            model_instance = create_model(model, **model_config)
+            
+            # Store mapping in model for XGBoost
+            if model == "xgboost":
                 model_instance.class_mapping = class_mapping
                 model_instance.reverse_mapping = reverse_mapping
-                # Use continuous labels for training
-                model_instance.fit(X_train, y_continuous)
-            else:
-                # Standard training for other models
-                model_instance = create_model(model, **model_config)
-                model_instance.fit(X_train, y_train)
+
+            # Train model
+            model_instance.fit(X_train, y_train)
 
             # Evaluate
             y_pred = model_instance.predict(X_test)
@@ -984,7 +1005,7 @@ def run_training(
 
             logger.info(f"{model} model performance: accuracy={metrics['accuracy']:.4f}, f1={metrics['f1_weighted']:.4f}")
 
-                        # Save model and metrics if output directory provided
+            # Save model and metrics if output directory provided
             if output_dir is not None:
                 if model == "xgboost":
                     model_instance.save_model(str(output_dir / "models" / "xgboost_model.json"))
@@ -1001,7 +1022,9 @@ def run_training(
                 "model": model_instance,
                 "metrics": metrics,
                 "predictions": y_pred,
-                "true_labels": y_test
+                "true_labels": y_test,
+                "class_mapping": class_mapping,
+                "reverse_mapping": reverse_mapping
             }
 
         else:
