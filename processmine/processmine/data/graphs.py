@@ -24,7 +24,8 @@ def build_graph_data(
     verbose: bool = True,
     bidirectional: bool = True,
     limit_nodes: Optional[int] = None,
-    mode: str = 'auto'
+    mode: str = 'auto',
+    use_edge_features: bool = True
 ) -> List[dgl.DGLGraph]:
     """
     Build graph data with optimized memory usage and vectorized operations
