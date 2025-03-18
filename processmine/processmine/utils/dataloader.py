@@ -508,7 +508,7 @@ class MemoryEfficientDataLoader:
 def adaptive_normalization(features, feature_statistics=None):
     """
     Apply appropriate normalization based on data characteristics
-    Implementation of the normalization reconciliation from the improvement plan
+    Fixed version that ensures proper type handling
     
     Args:
         features: Feature tensor or array to normalize
@@ -517,6 +517,9 @@ def adaptive_normalization(features, feature_statistics=None):
     Returns:
         Normalized features
     """
+    import numpy as np
+    import torch
+    
     # Convert to numpy if tensor
     is_tensor = torch.is_tensor(features)
     if is_tensor:
@@ -524,6 +527,10 @@ def adaptive_normalization(features, feature_statistics=None):
         features_np = features.cpu().numpy()
     else:
         features_np = features
+    
+    # Ensure features are float type for normalization
+    if features_np.dtype.kind in 'iu':  # If integer type
+        features_np = features_np.astype(np.float32)
     
     # Calculate statistics if not provided
     if feature_statistics is None:
@@ -535,17 +542,17 @@ def adaptive_normalization(features, feature_statistics=None):
             'skewness': _calculate_skewness(features_np)
         }
     
-    # Get statistics
-    skewness = feature_statistics['skewness']
-    min_vals = feature_statistics['min']
-    max_vals = feature_statistics['max']
+    # Get statistics and ensure they're float arrays
+    skewness = np.asarray(feature_statistics['skewness'], dtype=np.float32)
+    min_vals = np.asarray(feature_statistics['min'], dtype=np.float32)
+    max_vals = np.asarray(feature_statistics['max'], dtype=np.float32)
     
     # Calculate range ratio (avoiding division by zero)
     epsilon = 1e-8
     range_ratio = np.divide(
         max_vals, 
         np.maximum(min_vals, epsilon),
-        out=np.ones_like(max_vals),
+        out=np.ones_like(max_vals, dtype=np.float32),  # Explicitly make this a float array
         where=min_vals>epsilon
     )
     
@@ -566,19 +573,19 @@ def adaptive_normalization(features, feature_statistics=None):
         normalized = features_np / norms
     else:
         # Well-behaved features - use MinMax
-        min_vals = feature_statistics['min']
-        max_vals = feature_statistics['max']
         range_vals = np.maximum(max_vals - min_vals, epsilon)
         normalized = (features_np - min_vals) / range_vals
     
     # Convert back to tensor if input was tensor
     if is_tensor:
-        normalized = torch.tensor(normalized, dtype=features.dtype, device=device)
+        normalized = torch.tensor(normalized, dtype=torch.float32, device=device)
     
     return normalized
 
 def _calculate_skewness(arr):
     """Calculate skewness of array elements along first axis"""
+    import numpy as np
+    
     mean = np.mean(arr, axis=0)
     std = np.std(arr, axis=0)
     # Avoid division by zero
