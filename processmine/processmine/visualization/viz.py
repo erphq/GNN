@@ -878,12 +878,12 @@ class ProcessVisualizer:
         return self._save_figure(fig, filename)
 
     def _create_interactive_process_flow(
-        self,
-        G,
-        task_encoder,
-        bottleneck_edges,
-        filename
-    ) -> Optional[str]:
+    self,
+    G,
+    task_encoder,
+    bottleneck_edges,
+    filename
+) -> Optional[str]:
         """
         Create interactive process flow visualization with Plotly
         
@@ -927,7 +927,6 @@ class ProcessVisualizer:
                     thickness=15,
                     title='Node Connections',
                     xanchor='left',
-                    titleside='right'
                 ),
                 line_width=2
             )
@@ -938,7 +937,8 @@ class ProcessVisualizer:
         node_text = []
         
         for node in G.nodes():
-            adjacencies = list(G.adjacency()[node])
+            # Fix: Use G[node] instead of G.adjacency()[node] for compatibility with newer NetworkX
+            adjacencies = list(G[node])
             node_adjacencies.append(len(adjacencies))
             
             # Get node label
