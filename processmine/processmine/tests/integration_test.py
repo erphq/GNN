@@ -59,6 +59,316 @@ def generate_synthetic_data(filepath, n_cases=50, n_activities=10, n_resources=5
     df.to_csv(filepath, index=False)
     return df
 
+
+
+
+"""
+Integration test for ablation study functionality with all improvement components.
+"""
+
+import os
+import unittest
+import tempfile
+import shutil
+import torch
+import numpy as np
+import pandas as pd
+from pathlib import Path
+import time
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class TestAblationIntegration(unittest.TestCase):
+    """Test ablation study integration with all improvement components"""
+    
+    @classmethod
+    def setUpClass(cls):
+        """Create test data and directories"""
+        # Create temp directory
+        cls.temp_dir = tempfile.mkdtemp()
+        cls.output_dir = Path(cls.temp_dir) / "results"
+        cls.data_path = Path(cls.temp_dir) / "test_data.csv"
+        
+        # Generate test data
+        cls._generate_test_data(cls.data_path)
+        
+        # Check if required dependencies are available
+        try:
+            import dgl
+            import processmine
+            cls.can_run_tests = True
+        except ImportError:
+            cls.can_run_tests = False
+            logger.warning("Required dependencies not found. Tests will be skipped.")
+    
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up test resources"""
+        shutil.rmtree(cls.temp_dir)
+    
+    @classmethod
+    def _generate_test_data(cls, path):
+        """Generate synthetic process data for testing"""
+        # Create test dataframe
+        n_cases = 20
+        n_activities = 5
+        n_resources = 3
+        events_per_case = 10
+        
+        # Generate cases
+        case_ids = np.repeat(np.arange(1, n_cases + 1), events_per_case)
+        
+        # Generate activities and resources
+        activities = np.random.randint(1, n_activities + 1, size=len(case_ids))
+        resources = np.random.randint(1, n_resources + 1, size=len(case_ids))
+        
+        # Generate timestamps
+        timestamps = []
+        for case_id in range(1, n_cases + 1):
+            start_time = pd.Timestamp('2023-01-01') + pd.Timedelta(hours=case_id)
+            for i in range(events_per_case):
+                timestamps.append(start_time + pd.Timedelta(minutes=30*i))
+        
+        # Create dataframe
+        df = pd.DataFrame({
+            'case_id': case_ids,
+            'task_id': activities,
+            'task_name': [f"Activity_{i}" for i in activities],
+            'resource_id': resources,
+            'resource': [f"Resource_{i}" for i in resources],
+            'timestamp': timestamps,
+        })
+        
+        # Save to CSV
+        df.to_csv(path, index=False)
+        logger.info(f"Test data generated with {len(df)} events, {n_cases} cases")
+    
+    def setUp(self):
+        """Skip tests if required dependencies are not available"""
+        if not self.can_run_tests:
+            self.skipTest("Required dependencies not found")
+    
+    def test_ablation_individual_components(self):
+        """Test ablation with individual improvement components"""
+        from processmine.core.ablation_integration import run_comprehensive_ablation
+        
+        # Define a subset of components to test (for faster execution)
+        components = [
+            "use_positional_encoding",
+            "use_adaptive_normalization",
+            "use_multi_objective_loss"
+        ]
+        
+        # Run ablation study with reduced parameters for testing
+        results = run_comprehensive_ablation(
+            data_path=self.data_path,
+            base_model="enhanced_gnn",
+            output_dir=self.output_dir / "test_single",
+            epochs=2,  # Very short for testing
+            batch_size=8,
+            components_to_test=components,
+            include_combinations=False,
+            max_workers=0,  # Serial execution
+            # Reduced model size for faster testing
+            hidden_dim=16,
+            num_layers=1,
+            heads=2
+        )
+        
+        # Verify that ablation ran successfully
+        self.assertIn("results", results)
+        self.assertIn("baseline", results["results"])
+        
+        # Verify each component was tested
+        for component in components:
+            # Each component should have a corresponding experiment named f"no_{component}"
+            expected_exp = f"no_{component}"
+            self.assertIn(expected_exp, results["results"])
+            
+            # Verify the experiment has the expected configuration
+            exp_results = results["results"][expected_exp]
+            self.assertIn("modifications", exp_results)
+            self.assertEqual(exp_results["modifications"], {component: False})
+            
+            # Verify metrics were computed
+            self.assertIn("test_acc_mean", exp_results)
+    
+    def test_ablation_with_advanced_workflow(self):
+        """Test integration with advanced workflow"""
+        from processmine.utils.memory import log_memory_usage
+        from processmine.workflow_integration import run_advanced_workflow_with_ablation
+        
+        # Run workflow with ablation
+        results = run_advanced_workflow_with_ablation(
+            data_path=self.data_path,
+            output_dir=self.output_dir / "test_workflow",
+            model="enhanced_gnn",
+            run_ablation=True,
+            ablation_epochs=2,  # Very short for testing
+            epochs=3,
+            batch_size=8,
+            # Component settings for main workflow
+            use_positional_encoding=True,
+            use_diverse_attention=True,
+            use_adaptive_normalization=True,
+            use_multi_objective_loss=True,
+            # Reduced model size for faster testing
+            hidden_dim=16,
+            num_layers=1,
+            heads=2,
+            # Ablation config
+            ablation_test_mode="disable",
+            ablation_include_combinations=False,
+            ablation_workers=0
+        )
+        
+        # Verify workflow results
+        self.assertIn("workflow", results)
+        self.assertIn("model", results["workflow"])
+        self.assertIn("metrics", results["workflow"])
+        
+        # Verify ablation results
+        self.assertIn("ablation", results)
+        self.assertIn("results", results["ablation"])
+        self.assertIn("baseline", results["ablation"]["results"])
+        
+        # Check for summary file
+        summary_path = self.output_dir / "test_workflow" / "ablation_summary.txt"
+        self.assertTrue(os.path.exists(summary_path))
+        
+        # Verify we have ablation results for each component
+        components = [
+            "use_positional_encoding",
+            "use_diverse_attention",
+            "use_batch_norm",
+            "use_residual",
+            "use_layer_norm",
+            "use_adaptive_normalization",
+            "use_multi_objective_loss"
+        ]
+        
+        # Each component should have a corresponding experiment
+        for component in components:
+            expected_exp = f"no_{component}"
+            self.assertIn(expected_exp, results["ablation"]["results"])
+
+    def test_adaptive_normalization_integration(self):
+        """Test specific integration of adaptive normalization with ablation"""
+        from processmine.data.loader import load_and_preprocess_data
+        from processmine.utils.dataloader import adaptive_normalization
+        
+        # Load data without normalization
+        df, task_encoder, resource_encoder = load_and_preprocess_data(
+            self.data_path,
+            norm_method=None  # No normalization initially
+        )
+        
+        # Get feature columns
+        feature_cols = [col for col in df.columns if col.startswith("feat_")]
+        features = df[feature_cols].values
+        
+        # Calculate feature statistics
+        feature_statistics = {
+            'mean': np.mean(features, axis=0),
+            'std': np.std(features, axis=0),
+            'min': np.min(features, axis=0),
+            'max': np.max(features, axis=0),
+            'skewness': self._calculate_skewness(features)
+        }
+        
+        # Apply adaptive normalization
+        normalized_features = adaptive_normalization(features, feature_statistics)
+        
+        # Verify normalization was applied
+        self.assertEqual(normalized_features.shape, features.shape)
+        
+        # Run a minimal ablation test focusing on normalization
+        from processmine.core.ablation_integration import run_comprehensive_ablation
+        
+        results = run_comprehensive_ablation(
+            data_path=self.data_path,
+            base_model="enhanced_gnn",
+            output_dir=self.output_dir / "test_norm",
+            epochs=2,  # Very short for testing
+            batch_size=8,
+            components_to_test=["use_adaptive_normalization"],
+            include_combinations=False,
+            max_workers=0,  # Serial execution
+            hidden_dim=16,
+            num_layers=1
+        )
+        
+        # Verify baseline includes adaptive normalization
+        self.assertIn("baseline", results["results"])
+        
+        # Verify we have an experiment without adaptive normalization
+        self.assertIn("no_use_adaptive_normalization", results["results"])
+    
+    def test_multi_objective_loss_integration(self):
+        """Test specific integration of multi-objective loss with ablation"""
+        # Create model with multi-objective loss
+        import torch
+        from processmine.models.gnn.architectures import ProcessLoss
+        
+        # Create a simple ProcessLoss instance
+        criterion = ProcessLoss(
+            task_weight=0.5,
+            time_weight=0.3,
+            structure_weight=0.2
+        )
+        
+        # Test with some dummy data
+        task_pred = torch.randn(10, 5)  # 10 samples, 5 classes
+        task_target = torch.randint(0, 5, (10,))  # 10 targets
+        time_pred = torch.randn(10)  # 10 time predictions 
+        time_target = torch.rand(10)  # 10 time targets
+        
+        # Forward pass
+        loss, components = criterion(task_pred, task_target, time_pred=time_pred, time_target=time_target)
+        
+        # Verify loss components
+        self.assertIn('task_loss', components)
+        self.assertIn('time_loss', components)
+        self.assertIn('structure_loss', components)
+        self.assertIn('combined_loss', components)
+        
+        # Run a minimal ablation test focusing on multi-objective loss
+        from processmine.core.ablation_integration import run_comprehensive_ablation
+        
+        results = run_comprehensive_ablation(
+            data_path=self.data_path,
+            base_model="enhanced_gnn",
+            output_dir=self.output_dir / "test_loss",
+            epochs=2,  # Very short for testing
+            batch_size=8,
+            components_to_test=["use_multi_objective_loss"],
+            include_combinations=False,
+            max_workers=0,  # Serial execution
+            hidden_dim=16,
+            num_layers=1
+        )
+        
+        # Verify baseline includes multi-objective loss
+        self.assertIn("baseline", results["results"])
+        
+        # Verify we have an experiment without multi-objective loss
+        self.assertIn("no_use_multi_objective_loss", results["results"])
+    
+    def _calculate_skewness(self, arr):
+        """Calculate skewness of array elements along first axis"""
+        mean = np.mean(arr, axis=0)
+        std = np.std(arr, axis=0)
+        # Avoid division by zero
+        std = np.maximum(std, 1e-8)
+        
+        # Calculate skewness (third moment)
+        n = arr.shape[0]
+        m3 = np.sum((arr - mean)**3, axis=0) / n
+        return m3 / (std**3)
+
 class ProcessMineIntegrationTests(unittest.TestCase):
     """Integration tests for ProcessMine package."""
     

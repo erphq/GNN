@@ -32,7 +32,7 @@ def run_ablation_study(
     **kwargs
 ) -> Dict[str, Any]:
     """
-    Run ablation study to evaluate different model components with DGL integration
+    Enhanced ablation study runner that properly handles all improvement components
     
     Args:
         data_path: Path to process data CSV file
@@ -58,6 +58,7 @@ def run_ablation_study(
         torch.cuda.manual_seed_all(seed)
     
     # Set DGL random seed
+    import dgl
     dgl.random.seed(seed)
     
     # Set up device if provided as string
@@ -78,15 +79,71 @@ def run_ablation_study(
         from processmine.utils.memory import log_memory_usage
         from processmine.core.ablation import AblationStudy
         from processmine.models.factory import get_model_config
+        from processmine.utils.dataloader import adaptive_normalization
         
-        # Load data
+        # Set up base configuration with default values for all components
+        base_config = {
+            # Add default values for all components from the improvement plan
+            'use_positional_encoding': True,
+            'use_diverse_attention': True,
+            'attention_type': 'combined',
+            'diversity_weight': kwargs.get('diversity_weight', 0.1),
+            'pos_enc_dim': kwargs.get('pos_enc_dim', 16),
+            'use_residual': True,
+            'use_batch_norm': True,
+            'use_layer_norm': False,
+            'use_adaptive_normalization': True,
+            'use_multi_objective_loss': True,
+            'predict_time': True  # Enable time prediction for multi-objective loss
+        }
+        
+        # Merge with model-specific config
+        model_config = get_model_config(base_model)
+        base_config.update(model_config)
+        
+        # Override with any user-provided kwargs
+        base_config.update(kwargs)
+        
+        # Load data - determine normalization method based on config
         logger.info(f"Loading data from {data_path}")
+        if base_config.get('use_adaptive_normalization', True):
+            # Adaptive normalization is handled in advanced_workflow
+            norm_method = None  # Using None triggers adaptive normalization later
+        else:
+            # Use standard L2 normalization
+            norm_method = 'l2'
+            
         df, task_encoder, resource_encoder = load_and_preprocess_data(
             data_path,
-            norm_method='l2',
+            norm_method=norm_method,
             cache_dir=cache_dir,
             use_dtypes=True
         )
+        
+        # If using adaptive normalization, apply it now
+        if base_config.get('use_adaptive_normalization', True) and norm_method is None:
+            logger.info("Applying adaptive normalization")
+            feature_cols = [col for col in df.columns if col.startswith("feat_")]
+            features = df[feature_cols].values
+            
+            # Calculate feature statistics
+            feature_statistics = {
+                'mean': np.mean(features, axis=0),
+                'std': np.std(features, axis=0),
+                'min': np.min(features, axis=0),
+                'max': np.max(features, axis=0),
+                'skewness': _calculate_skewness(features)
+            }
+            
+            # Apply normalization
+            normalized_features = adaptive_normalization(features, feature_statistics)
+            
+            # Update dataframe with normalized features
+            for i, col in enumerate(feature_cols):
+                df[col] = normalized_features[:, i]
+        
+        # Store the normalization decision for reference
+        base_config['used_adaptive_normalization'] = (norm_method is None)
         
         # Log memory usage
         log_memory_usage()
@@ -131,11 +188,7 @@ def run_ablation_study(
             val_idx = indices[int(0.7 * len(indices)):int(0.85 * len(indices))]
             test_idx = indices[int(0.85 * len(indices)):]
         
-        # Create base configuration
-        base_config = get_model_config(base_model)
-        base_config.update(kwargs)
-        
-        # Add common training parameters
+        # Update base configuration with common training parameters
         base_config.update({
             'epochs': epochs,
             'batch_size': batch_size,
@@ -170,7 +223,9 @@ def run_ablation_study(
                     'use_diverse_attention',
                     'use_residual',
                     'use_batch_norm',
-                    'use_layer_norm'
+                    'use_layer_norm',
+                    'use_adaptive_normalization',  # Include adaptive normalization
+                    'use_multi_objective_loss'     # Include multi-objective loss
                 ],
                 disable=True  # Test by disabling each component
             )
@@ -186,6 +241,9 @@ def run_ablation_study(
             if 'grid_search' in ablation_config:
                 study.add_grid_search(ablation_config['grid_search'])
         
+        # Always add a baseline experiment
+        study.add_experiment("baseline", {})
+        
         # Define run function for each experiment
         def run_experiment(config, device):
             # Create model
@@ -197,7 +255,8 @@ def run_ablation_study(
                 output_dim=config['output_dim'],
                 **{k: v for k, v in config.items() if k not in 
                    ['input_dim', 'output_dim', 'model_type', 'epochs', 'batch_size', 
-                    'lr', 'seed', 'train_idx', 'val_idx', 'test_idx', 'mem_efficient']}
+                    'lr', 'seed', 'train_idx', 'val_idx', 'test_idx', 'mem_efficient',
+                    'used_adaptive_normalization']}
             )
             
             # Get data indices
@@ -360,3 +419,15 @@ def run_ablation_study(
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
+
+def _calculate_skewness(arr):
+    """Calculate skewness of array elements along first axis"""
+    mean = np.mean(arr, axis=0)
+    std = np.std(arr, axis=0)
+    # Avoid division by zero
+    std = np.maximum(std, 1e-8)
+    
+    # Calculate skewness (third moment)
+    n = arr.shape[0]
+    m3 = np.sum((arr - mean)**3, axis=0) / n
+    return m3 / (std**3)
