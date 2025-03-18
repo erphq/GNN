@@ -414,32 +414,39 @@ def run_training(
             
             # Prepare for training
             
-            # Split indices with stratification if possible
+            # Split indices with stratification for graph classification tasks
             try:
-                # Extract labels for stratification
-                graph_labels = [g.ndata['label'][0].item() if 'label' in g.ndata else 0 for g in graphs]
+                # Extract GRAPH-LEVEL labels for stratification (common in DGL graph classification)
+                # Adjust attribute name if your dataset uses different field (e.g., 'label', 'y', etc.)
+                graph_labels = [g.ndata['graph_label'][0].item() for g in graphs]  # Common pattern if using node data for graph labels
+                # Alternative if using proper graph attributes:
+                # graph_labels = [g.graph['label'].item() for g in graphs]
                 
                 from sklearn.model_selection import train_test_split
+                
+                # First split: 70% train, 30% temp (val+test)
                 train_idx, temp_idx = train_test_split(
-                    range(len(graphs)), 
-                    test_size=0.3, 
+                    range(len(graphs)),
+                    test_size=0.3,
                     random_state=seed,
                     stratify=graph_labels
                 )
+                
+                # Second split: 15% val, 15% test (half of 30%)
                 val_idx, test_idx = train_test_split(
-                    temp_idx, 
-                    test_size=0.5, 
+                    temp_idx,
+                    test_size=0.5,
                     random_state=seed,
                     stratify=[graph_labels[i] for i in temp_idx]
                 )
             except Exception as e:
-                # Fallback to random split
-                logger.warning(f"Stratified split failed, using random split: {e}")
-                indices = np.arange(len(graphs))
-                np.random.shuffle(indices)
+                # Fallback to random split with warning
+                logger.warning(f"Stratified split failed: {e}. Using random split.")
+                indices = np.random.permutation(len(graphs))
                 train_idx = indices[:int(0.7 * len(indices))]
                 val_idx = indices[int(0.7 * len(indices)):int(0.85 * len(indices))]
                 test_idx = indices[int(0.85 * len(indices)):]
+
 
             # Apply DGL sampling if requested (for very large graphs)
             if dgl_sampling != "none" and any(g.num_nodes() > 1000 for g in graphs):

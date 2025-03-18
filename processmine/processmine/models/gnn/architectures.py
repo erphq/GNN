@@ -1155,7 +1155,7 @@ class CombinedGATLayer(nn.Module):
             
         Returns:
             If return_attention=False:
-                Updated node features
+                Tuple of (node features, diversity_loss)
             If return_attention=True:
                 Tuple of (node features, diversity_loss, attention_weights)
         """
@@ -1177,17 +1177,19 @@ class CombinedGATLayer(nn.Module):
         
         # Custom message function that computes combined attention
         def message_func(edges):
-            # Content attention
+            # Content attention: [num_edges, num_heads, out_dim] * [1, num_heads, out_dim] -> [num_edges, num_heads]
             src_attn = (edges.src['content'] * self.attn_src).sum(dim=-1)
             dst_attn = (edges.dst['content'] * self.attn_dst).sum(dim=-1)
             content_e = src_attn + dst_attn
             
-            # Positional attention
+            # Positional attention: [num_edges, num_heads, out_dim//4] * [1, num_heads, out_dim//4] -> [num_edges, num_heads]
             src_pos_attn = (edges.src['pos'] * self.pos_attn_src).sum(dim=-1)
             dst_pos_attn = (edges.dst['pos'] * self.pos_attn_dst).sum(dim=-1)
             pos_e = src_pos_attn + dst_pos_attn
             
             # Combine attention components with learned weights
+            # att_combination: [num_heads, 2]
+            # For broadcasting: [num_edges, num_heads] * [1, num_heads] 
             combined_e = (
                 content_e * self.att_combination[:, 0].unsqueeze(0) + 
                 pos_e * self.att_combination[:, 1].unsqueeze(0)
@@ -1200,22 +1202,26 @@ class CombinedGATLayer(nn.Module):
         # Apply message function to edges
         g.apply_edges(message_func)
         
-        # Apply softmax to attention weights
+        # Apply softmax to attention weights (per dst node)
         g.edata['a'] = dgl.ops.edge_softmax(g, g.edata['e'])
         
-        # Compute diversity loss if in training mode
-        if self.training or return_attention:
-            diversity_loss = self._calculate_diversity_loss(g)
-        else:
-            diversity_loss = torch.tensor(0.0, device=feat.device)
+        # Reshape attention for broadcasting with content features
+        # a: [num_edges, num_heads] -> [num_edges, num_heads, 1]
+        g.edata['a'] = g.edata['a'].unsqueeze(-1)
         
-        # Message passing
+        # Message passing with properly shaped attention
         g.update_all(fn.u_mul_e('content', 'a', 'm'), fn.sum('m', 'ft'))
         
         # Get the updated features
         h = g.ndata['ft']
         
-        # Reshape for output
+        # Clean up to free memory
+        if 'content' in g.ndata:
+            del g.ndata['content']
+        if 'pos' in g.ndata:
+            del g.ndata['pos']
+        
+        # Reshape for output: [num_nodes, num_heads * out_dim]
         h = h.view(-1, self.num_heads * self.out_dim)
         
         # Apply residual connection if specified
@@ -1225,6 +1231,12 @@ class CombinedGATLayer(nn.Module):
             else:
                 resval = feat
             h = h + resval
+        
+        # Compute diversity loss if in training mode
+        if self.training or return_attention:
+            diversity_loss = self._calculate_diversity_loss(g)
+        else:
+            diversity_loss = torch.tensor(0.0, device=feat.device)
         
         # Return with diversity loss and attention weights if requested
         if return_attention:
@@ -1243,14 +1255,17 @@ class CombinedGATLayer(nn.Module):
             Diversity loss tensor
         """
         if self.num_heads <= 1:
-            return torch.tensor(0.0, device=g.device)
+            return torch.tensor(0.0, device=g.device if hasattr(g, 'device') else 'cpu')
         
-        # Step 1: Compute head correlations
-        # Get attention weights: [E, num_heads]
+        # Get attention weights: [num_edges, num_heads, 1]
         attn = g.edata['a']
         
+        # Squeeze out the last dimension if it exists: [num_edges, num_heads]
+        if attn.dim() > 2:
+            attn = attn.squeeze(-1)
+        
         # Calculate pairwise cosine similarity between attention heads
-        head_sim = torch.zeros(self.num_heads, self.num_heads, device=g.device)
+        head_sim = torch.zeros(self.num_heads, self.num_heads, device=attn.device)
         
         for i in range(self.num_heads):
             for j in range(i+1, self.num_heads):
@@ -1269,59 +1284,12 @@ class CombinedGATLayer(nn.Module):
                 head_sim[i, j] = sim
                 head_sim[j, i] = sim
         
-        # Step 2: Calculate global head similarity
-        # (exclude diagonal elements)
-        mask = ~torch.eye(self.num_heads, dtype=torch.bool, device=g.device)
+        # Calculate global head similarity (exclude diagonal elements)
+        mask = ~torch.eye(self.num_heads, dtype=torch.bool, device=attn.device)
         global_similarity = head_sim[mask].mean()
         
-        # Step 3: Calculate node-level diversity
-        # For each node, calculate entropy of attention distribution
-        entropy_per_node = []
-        
-        # Get source nodes for each edge
-        src_nodes = g.edges()[0]
-        
-        # Convert to numpy for faster computation if tensor is large
-        if len(src_nodes) > 10000:
-            src_nodes_np = src_nodes.cpu().numpy()
-            unique_nodes, inverse_indices = np.unique(src_nodes_np, return_inverse=True)
-            unique_nodes = torch.tensor(unique_nodes, device=g.device)
-        else:
-            unique_nodes, inverse_indices = torch.unique(src_nodes, return_inverse=True)
-        
-        # For each unique source node
-        for node_idx in range(len(unique_nodes)):
-            # Find edges with this source node
-            edge_mask = (inverse_indices == node_idx)
-            
-            # Get attention for these edges
-            node_attn = attn[edge_mask]
-            
-            # Skip if no edges
-            if len(node_attn) <= 1:
-                continue
-            
-            # Calculate entropy for each head
-            for h in range(self.num_heads):
-                head_attn = node_attn[:, h]
-                
-                # Normalize
-                head_attn = F.normalize(head_attn, p=1, dim=0)
-                
-                # Calculate entropy (avoid log(0) by adding epsilon)
-                epsilon = 1e-10
-                entropy = -torch.sum(head_attn * torch.log(head_attn + epsilon))
-                entropy_per_node.append(entropy.item())
-        
-        # Calculate average entropy (higher is better)
-        avg_entropy = torch.tensor(
-            sum(entropy_per_node) / len(entropy_per_node) if entropy_per_node else 0.0,
-            device=g.device
-        )
-        
-        # Combine metrics - balance head similarity and node diversity
-        # Higher similarity and lower entropy mean less diversity
-        diversity_loss = (global_similarity * 0.7 - avg_entropy * 0.3) * self.diversity_weight
+        # Final diversity loss (higher similarity means less diversity)
+        diversity_loss = global_similarity * self.diversity_weight
         
         return diversity_loss
     
