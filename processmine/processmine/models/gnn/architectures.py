@@ -228,6 +228,272 @@ class MemoryEfficientGNN(BaseProcessModel):
         # Storage for attention weights
         self.attention_weights = None
 
+    
+    def _set_pooling_func(self, pooling_type):
+        """
+        Set up pooling function based on pooling type
+        
+        Args:
+            pooling_type: Type of pooling ('mean', 'sum', 'max', 'attention', 'combined')
+            
+        Returns:
+            Pooling function
+        """
+        import dgl
+        
+        if pooling_type == "mean":
+            return lambda g, h: dgl.mean_nodes(g, 'h')
+        elif pooling_type == "sum":
+            return lambda g, h: dgl.sum_nodes(g, 'h')
+        elif pooling_type == "max":
+            return lambda g, h: dgl.max_nodes(g, 'h')
+        elif pooling_type == "attention":
+            # Attention pooling uses self.pool_attention
+            return self._attention_pooling
+        elif pooling_type == "combined":
+            # Combined pooling uses self.pool_proj
+            return self._combined_pooling
+        else:
+            # Default to mean pooling
+            return lambda g, h: dgl.mean_nodes(g, 'h')
+            
+    def _attention_pooling(self, g, h):
+        """
+        Attention-based pooling
+        
+        Args:
+            g: DGL graph
+            h: Node features
+            
+        Returns:
+            Pooled graph features
+        """
+        # Set node features
+        g.ndata['h'] = h
+        
+        # Calculate attention weights
+        attention_scores = self.pool_attention(h)  # [num_nodes, 1]
+        
+        # Apply softmax to get normalized weights
+        g.ndata['attn'] = torch.softmax(attention_scores, dim=0)
+        
+        # Weighted sum
+        weighted_features = g.ndata['h'] * g.ndata['attn']
+        g.ndata['h_weighted'] = weighted_features
+        
+        # Sum over nodes
+        import dgl
+        return dgl.sum_nodes(g, 'h_weighted')
+        
+    def _combined_pooling(self, g, h):
+        """
+        Combined pooling (mean, max, and sum)
+        
+        Args:
+            g: DGL graph
+            h: Node features
+            
+        Returns:
+            Pooled graph features
+        """
+        # Set node features
+        g.ndata['h'] = h
+        
+        # Get different pooling results
+        import dgl
+        mean_pooled = dgl.mean_nodes(g, 'h')
+        max_pooled = dgl.max_nodes(g, 'h')
+        sum_pooled = dgl.sum_nodes(g, 'h')
+        
+        # Concatenate pooling results
+        combined = torch.cat([mean_pooled, max_pooled, sum_pooled], dim=1)
+        
+        # Project to original dimension
+        return self.pool_proj(combined)
+    
+    
+    def _create_conv_layer(self, in_dim, out_dim, first_layer=False):
+        """
+        Create appropriate graph convolutional layer based on attention type
+        
+        Args:
+            in_dim: Input dimension
+            out_dim: Output dimension
+            first_layer: Whether this is the first layer
+            
+        Returns:
+            Graph convolutional layer
+        """
+        if self.attention_type == "basic":
+            return MemoryEfficientGATLayer(
+                in_dim=in_dim,
+                out_dim=out_dim,
+                num_heads=self.heads,
+                feat_drop=self.dropout,
+                residual=self.use_residual,
+                sparse_attention=self.sparse_attention,
+            )
+        elif self.attention_type == "positional":
+            return PositionalGATLayer(
+                in_dim=in_dim,
+                out_dim=out_dim,
+                num_heads=self.heads,
+                pos_dim=self.pos_enc_dim,
+                feat_drop=self.dropout,
+                residual=self.use_residual
+            )
+        elif self.attention_type == "diverse":
+            return DiverseGATLayer(
+                in_dim=in_dim,
+                out_dim=out_dim,
+                num_heads=self.heads,
+                diversity_weight=self.diversity_weight,
+                feat_drop=self.dropout,
+                residual=self.use_residual
+            )
+        elif self.attention_type == "combined":
+            return CombinedGATLayer(
+                in_dim=in_dim,
+                out_dim=out_dim,
+                num_heads=self.heads,
+                pos_dim=self.pos_enc_dim,
+                diversity_weight=self.diversity_weight,
+                feat_drop=self.dropout,
+                residual=self.use_residual
+            )
+        else:
+            raise ValueError(f"Unknown attention type: {self.attention_type}")
+
+    # Add the missing method _generate_positions for positional encoding
+    def _generate_positions(self, g):
+        """
+        Generate positional encodings for nodes in graph
+        
+        Args:
+            g: DGL graph
+            
+        Returns:
+            Position tensor [num_nodes, 2]
+        """
+        num_nodes = g.num_nodes()
+        device = g.device if hasattr(g, 'device') else next(self.parameters()).device
+        
+        # For batched graphs, handle each graph separately
+        if hasattr(g, 'batch_num_nodes') and hasattr(g, 'batch_size') and g.batch_size > 1:
+            batch_num_nodes = g.batch_num_nodes()
+            positions = torch.zeros(num_nodes, 2, device=device)
+            
+            # Process each graph in the batch
+            start_idx = 0
+            for i, n_nodes in enumerate(batch_num_nodes):
+                # Generate sequential positions for this graph
+                graph_pos = torch.arange(n_nodes, device=device) / max(n_nodes - 1, 1)
+                # First dimension: normalized position in sequence
+                positions[start_idx:start_idx+n_nodes, 0] = graph_pos
+                # Second dimension: normalized position from middle (for capturing centrality)
+                positions[start_idx:start_idx+n_nodes, 1] = 1.0 - torch.abs(graph_pos - 0.5) * 2.0
+                
+                # Update start index for next graph
+                start_idx += n_nodes
+        else:
+            # Single graph - create sequential positions
+            positions = torch.zeros(num_nodes, 2, device=device)
+            if num_nodes > 1:
+                # First dimension: normalized position in sequence
+                positions[:, 0] = torch.arange(num_nodes, device=device) / (num_nodes - 1)
+                # Second dimension: normalized position from middle (for capturing centrality)
+                positions[:, 1] = 1.0 - torch.abs(positions[:, 0] - 0.5) * 2.0
+        
+        return positions
+    
+    
+    def forward(self, g):
+        """
+        Forward pass for the GNN model
+        
+        Args:
+            g: DGL graph or batched graph
+            
+        Returns:
+            Dictionary with model outputs
+        """
+        # Get node features
+        h = g.ndata['feat']
+        
+        # Handle positional encodings if needed
+        if self.attention_type in ["positional", "combined"]:
+            pos = self._generate_positions(g)
+            pos_embedding = self.pos_encoder(pos)
+            h = torch.cat([h, pos_embedding], dim=-1)
+        
+        # Apply GNN layers
+        attn_weights = []  # Store attention weights if needed
+        diversity_losses = []  # Store diversity losses if needed
+        
+        for i, conv in enumerate(self.convs):
+            # Apply convolutional layer
+            if self.attention_type in ["diverse", "combined"]:
+                h_new, diversity_loss, attn = conv(g, h, return_attention=True)
+                diversity_losses.append(diversity_loss)
+                attn_weights.append(attn)
+            else:
+                if hasattr(conv, 'return_attention_weights'):
+                    h_new, attn = conv(g, h, return_attention_weights=True)
+                    attn_weights.append(attn)
+                else:
+                    h_new = conv(g, h)
+            
+            # Apply normalization if enabled
+            if self.norms is not None:
+                h_new = self.norms[i](h_new)
+            
+            # Apply activation
+            h_new = F.elu(h_new)
+            
+            # Apply dropout
+            h_new = F.dropout(h_new, p=self.dropout, training=self.training)
+            
+            # Update h
+            h = h_new
+        
+        # Store node representations in graph
+        g.ndata['h'] = h
+        
+        # Apply pooling to get graph-level features
+        graph_h = self.pooling_func(g, h)
+        
+        # Task prediction
+        task_logits = self.task_pred(graph_h)
+        
+        # Create output dictionary
+        output = {"task_pred": task_logits}
+        
+        # Time prediction if enabled
+        if self.predict_time and hasattr(self, 'time_pred') and self.time_pred is not None:
+            time_pred = self.time_pred(graph_h)
+            output["time_pred"] = time_pred
+        
+        # Add diversity loss if applicable
+        if diversity_losses:
+            output["diversity_loss"] = sum(diversity_losses) / len(diversity_losses)
+            output["diversity_weight"] = self.diversity_weight
+        
+        # Store attention weights for interpretability
+        self.attention_weights = attn_weights
+        
+        return output
+    
+    def _init_weights(self):
+        """Initialize network weights with Xavier uniform initialization"""
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight.data)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias.data)
+            elif hasattr(m, 'weight') and hasattr(m, 'reset_parameters'):
+                m.reset_parameters()
+    
+    
     def get_embeddings(self, g):
         """
         Extract node embeddings from the model

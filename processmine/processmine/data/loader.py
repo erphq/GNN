@@ -281,8 +281,14 @@ def _standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
         "concept:name": "task_name",
         "org:resource": "resource",
         "time:timestamp": "timestamp",
-        "case:id": "case_id"
     }
+    
+    # If case:id exists but case:concept:name doesn't, map it to case_id
+    if "case:id" in df.columns and "case:concept:name" not in df.columns:
+        column_mappings["case:id"] = "case_id"
+    elif "case:id" in df.columns:
+        # If both exist, map case:id to a different name
+        column_mappings["case:id"] = "case_id_alt"
     
     # Only rename columns that exist in the dataframe
     existing_mappings = {k: v for k, v in column_mappings.items() if k in df.columns}
