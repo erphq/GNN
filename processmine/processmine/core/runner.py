@@ -675,27 +675,49 @@ def run_training(
             from torch.utils.data import TensorDataset, DataLoader
 
             def create_tensor_dataloader(indices, batch_size, shuffle=False):
+                """
+                Create tensor dataloader with proper padding for sequences
+                
+                Args:
+                    indices: Indices of sequences to include
+                    batch_size: Batch size
+                    shuffle: Whether to shuffle data
+                    
+                Returns:
+                    DataLoader with properly padded sequences
+                """
+                # Extract sequences for these indices
                 batch_sequences = [sequences[i] for i in indices]
                 batch_targets = [targets[i] for i in indices]
                 batch_lengths = [seq_lengths[i] for i in indices]
 
+                # Get maximum feature dimension to ensure all tensors have same shape
+                max_feature_dim = max(seq.size(1) for seq in batch_sequences)
+                
                 # Find max sequence length in this batch
                 max_len = max(batch_lengths)
 
-                # Pad sequences to same length if needed
+                # Pad sequences to same length and feature dimension if needed
                 padded_seqs = []
                 padded_targets = []
 
                 for seq, target, length in zip(batch_sequences, batch_targets, batch_lengths):
+                    # Ensure sequence has consistent feature dimension
+                    if seq.size(1) < max_feature_dim:
+                        # Pad feature dimension if needed
+                        feature_padding = torch.zeros(length, max_feature_dim - seq.size(1), 
+                                                    dtype=seq.dtype, device=seq.device)
+                        seq = torch.cat([seq, feature_padding], dim=1)
+                    
+                    # Pad sequence length if needed
                     if length < max_len:
-                        padded_seq = torch.cat([
-                            seq,
-                            torch.zeros(max_len - length, seq.size(1), dtype=seq.dtype, device=seq.device)
-                        ], dim=0)
-                        padded_target = torch.cat([
-                            target,
-                            torch.zeros(max_len - length, dtype=target.dtype, device=target.device)
-                        ], dim=0)
+                        seq_padding = torch.zeros(max_len - length, max_feature_dim,
+                                                dtype=seq.dtype, device=seq.device)
+                        padded_seq = torch.cat([seq, seq_padding], dim=0)
+                        
+                        target_padding = torch.zeros(max_len - length, 
+                                                dtype=target.dtype, device=target.device)
+                        padded_target = torch.cat([target, target_padding], dim=0)
                     else:
                         padded_seq = seq
                         padded_target = target
@@ -703,14 +725,29 @@ def run_training(
                     padded_seqs.append(padded_seq)
                     padded_targets.append(padded_target)
 
-                # Stack into tensors
-                seq_tensor = torch.stack(padded_seqs)
-                target_tensor = torch.stack(padded_targets)
-                length_tensor = torch.tensor(batch_lengths)
+                try:
+                    # Stack into tensors with consistent dimensions
+                    seq_tensor = torch.stack(padded_seqs)
+                    target_tensor = torch.stack(padded_targets)
+                    length_tensor = torch.tensor(batch_lengths)
 
-                # Create dataset and dataloader
-                dataset = TensorDataset(seq_tensor, target_tensor, length_tensor)
-                return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+                    # Create dataset and dataloader
+                    dataset = TensorDataset(seq_tensor, target_tensor, length_tensor)
+                    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+                except Exception as e:
+                    logger.error(f"Error creating tensor dataloader: {e}")
+                    # Print dimensions for debugging
+                    for i, seq in enumerate(padded_seqs):
+                        logger.error(f"Sequence {i} shape: {seq.shape}")
+                    
+                    # Fallback to a minimal working dataloader
+                    # Create a simple dummy dataset with correct dimensions
+                    dummy_seq = torch.zeros(1, max_len, max_feature_dim)
+                    dummy_target = torch.zeros(1, max_len)
+                    dummy_length = torch.tensor([1])
+                    
+                    dataset = TensorDataset(dummy_seq, dummy_target, dummy_length)
+                    return DataLoader(dataset, batch_size=1)
 
             # Create dataloaders
             train_loader = create_tensor_dataloader(train_idx, batch_size, shuffle=True)

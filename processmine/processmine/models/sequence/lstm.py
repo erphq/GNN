@@ -210,6 +210,32 @@ class NextActivityLSTM(nn.Module):
         
         return {"task_pred": logits}
     
+    
+    def predict(self, x):
+        """
+        Make predictions on input data
+        
+        Args:
+            x: Input data
+            
+        Returns:
+            Predicted classes
+        """
+        self.eval()
+        with torch.no_grad():
+            outputs = self.forward(x)
+            
+            # Get predictions from task_pred
+            if isinstance(outputs, dict) and 'task_pred' in outputs:
+                logits = outputs['task_pred']
+            else:
+                logits = outputs
+                
+            # Get predicted classes
+            _, predictions = torch.max(logits, dim=1)
+            
+            return predictions
+    
     def _process_sequence_list(self, sequences, seq_lengths=None):
         """
         Process a list of variable-length sequence tensors

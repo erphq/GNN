@@ -30,6 +30,12 @@ def ensure_continuous_labels(labels):
         # For lists
         remapped = np.array([class_mapping[lbl] for lbl in labels])
     
+    # Verify that classes are continuous from 0 to len(unique_classes)-1
+    remapped_unique = np.unique(remapped)
+    expected_unique = np.arange(len(unique_classes))
+    if not np.array_equal(remapped_unique, expected_unique):
+        logger.warning(f"Non-continuous class labels detected after remapping. Expected: {expected_unique}, got: {remapped_unique}")
+    
     return remapped, class_mapping, reverse_mapping
 
 def create_model(model_type: str, **kwargs) -> Any:
@@ -117,7 +123,15 @@ def create_model(model_type: str, **kwargs) -> Any:
                 
         # Remove model_type if present to avoid duplicate kwargs
         model_kwargs.pop('model_type', None)
+        
+        # Remove num_cls for GNN models - they use output_dim instead
+        model_kwargs.pop('num_cls', None)
 
+    # LSTM specific parameter handling
+    if model_type in ['lstm', 'enhanced_lstm']:
+        # Remove input_dim for LSTM models - not needed
+        model_kwargs.pop('input_dim', None)
+    
     # Create specific model based on type
     if model_type == 'gnn':
         from processmine.models.gnn.architectures import MemoryEfficientGNN
@@ -185,8 +199,7 @@ def create_model(model_type: str, **kwargs) -> Any:
         
         # Remove any parameters not accepted by NextActivityLSTM to avoid errors
         valid_params = ['num_cls', 'emb_dim', 'hidden_dim', 'num_layers', 'dropout', 
-                        'bidirectional', 'use_attention', 'use_layer_norm', 'mem_efficient',
-                        'input_dim']
+                        'bidirectional', 'use_attention', 'use_layer_norm', 'mem_efficient']
         
         lstm_kwargs = {k: v for k, v in lstm_kwargs.items() if k in valid_params}
         
@@ -210,7 +223,7 @@ def create_model(model_type: str, **kwargs) -> Any:
         # Remove any parameters not accepted by EnhancedProcessRNN
         valid_params = ['num_cls', 'emb_dim', 'hidden_dim', 'num_layers', 'dropout',
                          'use_gru', 'use_transformer', 'num_heads', 'use_time_features',
-                         'time_encoding_dim', 'mem_efficient', 'input_dim']
+                         'time_encoding_dim', 'mem_efficient']
         
         lstm_kwargs = {k: v for k, v in lstm_kwargs.items() if k in valid_params}
         
