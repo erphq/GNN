@@ -10,7 +10,7 @@ This research project implements a novel approach to process mining using Graph 
 
 - **Somesh Misra** [@mathprobro](https://x.com/mathprobro)
 - **Shashank Dixit** [@sphinx](https://x.com/protosphinx)
-- **Research Group**: [ERP.AI](https://www.erp.ai) Research
+- **Research Group**: [ERP•AI](https://www.erp.ai) Research
 
 ## 3. Key Components
 
@@ -64,7 +64,7 @@ src/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/ERPdotAI/GNN.git
+git clone https://github.com/erphq/GNN.git
 cd GNN
 ```
 
@@ -141,7 +141,7 @@ If you use this code in your research, please cite:
   author = {Shashank Dixit/Somesh Misra},
   title = {Process Mining with Graph Neural Networks},
   year = {2025},
-  publisher = {ERP.AI},
-  url = {https://github.com/ERPdotAI/GNN}
+  publisher = {ERP•AI},
+  url = {https://github.com/erphq/GNN}
 }
 ``` 
