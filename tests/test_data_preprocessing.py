@@ -148,3 +148,33 @@ def test_split_mode_validation_rejects_unknown():
         assert "case" in str(e) and "temporal" in str(e)
     else:
         raise AssertionError("split_cases should reject unknown mode")
+
+
+def test_xes_load_roundtrip(tmp_path, synthetic_event_log):
+    """Round-trip a CSV through XES and assert the loader recovers the
+    same case_count + columns."""
+    pm4py = pytest.importorskip("pm4py")
+
+    df_in = synthetic_event_log.rename(
+        columns={
+            "case_id": "case:concept:name",
+            "task_name": "concept:name",
+            "timestamp": "time:timestamp",
+            "resource": "org:resource",
+            "amount": "case:Amount",
+        }
+    )
+    # pm4py.write_xes wants timestamps as datetime — already are.
+    log = pm4py.format_dataframe(
+        df_in, case_id="case:concept:name",
+        activity_key="concept:name", timestamp_key="time:timestamp",
+    )
+    xes_path = tmp_path / "log.xes"
+    pm4py.write_xes(log, str(xes_path))
+
+    df_out = load_and_preprocess_data(str(xes_path))
+    for c in ("case_id", "task_name", "timestamp", "resource", "amount"):
+        assert c in df_out.columns
+    # Allow a small drop from the dropna(timestamp) path; structure
+    # should otherwise survive the round-trip.
+    assert df_out["case_id"].nunique() == synthetic_event_log["case_id"].nunique()

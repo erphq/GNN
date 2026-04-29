@@ -43,16 +43,30 @@ def load_and_preprocess_data(
     data_path: str,
     required_cols: Optional[Sequence[str]] = None,
 ) -> pd.DataFrame:
-    """Load a process-mining event log from CSV, normalize column names, and
-    sort by (case_id, timestamp). Drops rows with unparseable timestamps.
+    """Load a process-mining event log, normalize column names, and sort
+    by (case_id, timestamp). Drops rows with unparseable timestamps.
 
-    Accepts both XES-style (`case:concept:name`, `concept:name`, …) and
-    snake_case (`case_id`, `task_name`, …) column conventions.
+    Accepts:
+
+    - **CSV** (any extension other than the XES variants below).
+    - **XES** (``.xes``, ``.xes.gz``) via PM4Py — most public process-mining
+      datasets (BPI Challenge, Hospital, etc.) ship in this format. PM4Py's
+      importer auto-fills the `case:Amount` and `org:resource` attributes
+      when present; the priority-based rename logic below normalizes them
+      to our snake_case schema.
+
+    XES-style column names (`case:concept:name`, `concept:name`,
+    `time:timestamp`, `org:resource`, `case:Amount`) are accepted and
+    auto-renamed regardless of source format.
     """
     if required_cols is None:
         required_cols = DEFAULT_REQUIRED_COLS
 
-    df = pd.read_csv(data_path)
+    lower = str(data_path).lower()
+    if lower.endswith(".xes") or lower.endswith(".xes.gz"):
+        df = _load_xes(data_path)
+    else:
+        df = pd.read_csv(data_path)
 
     # Priority-based rename: when multiple XES-style aliases map to the
     # same canonical name (e.g. BPI logs carry both `case:id` and
@@ -92,6 +106,33 @@ def load_and_preprocess_data(
     df.dropna(subset=["timestamp"], inplace=True)
     df.sort_values(["case_id", "timestamp"], inplace=True)
     df.reset_index(drop=True, inplace=True)
+    return df
+
+
+def _load_xes(data_path: str) -> pd.DataFrame:
+    """Read an XES file via PM4Py and convert to our canonical dataframe.
+
+    PM4Py's importer returns an EventLog object with one trace per case
+    and one event per dict. ``log_converter.apply(log, variant=TO_DATA_FRAME)``
+    flattens that into a pandas DataFrame with ``case:concept:name``,
+    ``concept:name`` etc. columns — same XES naming the rename logic
+    below already handles, so the rest of the pipeline doesn't care.
+
+    A missing ``case:Amount`` column is filled with 0.0; the model
+    treats it as a numeric feature, so a constant column is harmless
+    while still letting the schema check pass.
+    """
+    from pm4py.objects.conversion.log import converter as log_converter
+    from pm4py.objects.log.importer.xes import importer as xes_importer
+
+    log = xes_importer.apply(str(data_path))
+    df = log_converter.apply(
+        log, variant=log_converter.Variants.TO_DATA_FRAME
+    )
+    if "case:Amount" not in df.columns and "amount" not in df.columns:
+        df["case:Amount"] = 0.0
+    if "org:resource" not in df.columns and "resource" not in df.columns:
+        df["org:resource"] = "unknown"
     return df
 
 
