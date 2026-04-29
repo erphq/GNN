@@ -1,8 +1,10 @@
 # Process Mining with Graph Neural Networks
 
 [![ci](https://github.com/erphq/gnn/actions/workflows/ci.yml/badge.svg)](https://github.com/erphq/gnn/actions/workflows/ci.yml)
+[![docker](https://github.com/erphq/gnn/actions/workflows/docker.yml/badge.svg)](https://github.com/erphq/gnn/actions/workflows/docker.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](#installation)
+[![rust](https://img.shields.io/badge/rust-stable-orange.svg)](./pm_fast)
 
 A research codebase combining **Graph Attention Networks**, **LSTMs**, **classical process mining**, and **tabular RL** for next-event prediction and process analysis on event-log data.
 
@@ -31,8 +33,10 @@ A research codebase combining **Graph Attention Networks**, **LSTMs**, **classic
 │   └── utils.py                 # set_seed(), pick_device()
 ├── visualization/
 │   └── process_viz.py           # confusion matrix, Sankey, transition heatmap, ...
+├── pm_fast/                     # Rust hot-path kernels (PyO3, optional 500×+ speedup)
+├── bench/                       # benchmark scripts (Python vs Rust)
 ├── tests/                       # pytest suite, synthetic event log fixtures
-├── .github/workflows/ci.yml     # ruff + pytest on push / PR
+├── .github/workflows/           # ci.yml (ruff + pytest + Rust), docker.yml (ghcr)
 ├── pyproject.toml               # project metadata + `gnn` script + ruff + pytest config
 └── main.py                      # legacy entry point (delegates to gnn_cli)
 ```
@@ -56,6 +60,17 @@ pip install --index-url https://download.pytorch.org/whl/cpu torch  # or a CUDA 
 pip install -r requirements.txt
 pip install -e .            # installs the `gnn` CLI entry point
 ```
+
+Optionally, build the Rust hot-path kernels for a 500×+ speedup on the
+per-case loops (`build_task_adjacency`, prefix builder for the LSTM):
+
+```bash
+pip install maturin
+cd pm_fast && maturin develop --release && cd ..
+```
+
+The pipeline auto-detects the extension and falls back to pure Python if
+it isn't installed, so this step is genuinely optional. See [pm_fast/README.md](./pm_fast/README.md) for details.
 
 ## Data format
 
@@ -141,11 +156,53 @@ numbers:
 A reproducibility helper `modules.utils.set_seed` seeds `random`,
 `numpy`, `torch` (CPU + CUDA), and toggles `cudnn.deterministic`.
 
-A known-suboptimal piece preserved for backwards compatibility: the GAT
-trains on a *graph-level* label that is the modal next-task across all
-events of a case (`compute_graph_label`). Switching to a node-level head
-is a meaningful methodology change and is left for a follow-up PR; see
-the docstring in `models/gat_model.py` for the rationale.
+## Methodology notes (v0.3 audit)
+
+Three further fixes, each with a regression test:
+
+1. **Node-level GAT head (default).** The GAT now predicts next-task at
+   every event (`shape=(total_nodes, num_classes)`) instead of pooling
+   to a single graph-level prediction supervised by the modal next-task.
+   The legacy graph-level head is kept behind `--gat-graph-label` for
+   reproducing v0.2 numbers; see
+   `tests/test_models.py::test_gat_forward_runs_node_level` and the
+   `_graph_level` companion test.
+2. **RL state-vector sizing.** `ProcessEnv._get_state` previously sized
+   the one-hot state by `len(all_tasks)` (the subset of task-ids that
+   appear as a transition source after `dropna(next_task)`) but indexed
+   it with `current_task` from the full label space. When some tasks
+   only appear as terminal events the index went out of bounds. Sized
+   by `len(le_task.classes_)` now.
+3. **Priority-based XES alias rename.** BPI logs ship both `case:id`
+   and `case:concept:name`, and the previous rename map collapsed both
+   to `case_id`, producing a duplicate-named column that broke
+   `df["case_id"]` access. The loader now picks the highest-priority
+   alias and drops collisions.
+
+## Performance (Rust hot paths)
+
+`pm_fast` ports the two pure-Python loops that dominated wall-clock time
+on real BPI logs (per-case adjacency increment, per-case prefix
+expansion). Numbers from `bench/bench_hotpaths.py` on a synthetic
+event log of 5,000 cases / 37,651 rows on M-series Apple silicon:
+
+| function                   | Python    | Rust        | speedup |
+|----------------------------|-----------|-------------|---------|
+| `build_task_adjacency`     | 396.31 ms | **0.67 ms** | **588×** |
+| `build_padded_prefixes`    | 396.27 ms | **0.78 ms** | **505×** |
+
+Reproduce: `python bench/bench_hotpaths.py --num-cases 5000 --repeats 5`.
+
+The kernels are wired in transparently — `modules.process_mining.build_task_adjacency`
+and the LSTM stage in `gnn_cli.stages` prefer the Rust kernel when
+`pm_fast` is importable and fall through to Python otherwise. CI builds
+the extension and runs a parity test that asserts byte-identical output
+against the reference implementation (`tests/test_fast_kernels.py`).
+
+GAT and LSTM training itself stays in PyTorch — those are already
+calling into BLAS / cuDNN, so there's nothing for Rust to win there.
+This is the "Option A" in the design discussion: profile, then push
+only the genuinely hot Python loops down to native code.
 
 ## Tests
 

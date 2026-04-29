@@ -72,6 +72,7 @@ class RunConfig:
     gat_layers: int = 2
     rl_episodes: int = 30
     clusters: int = 3
+    gat_node_level: bool = True
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -128,6 +129,7 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
         num_layers=cfg.gat_layers,
         heads=cfg.gat_heads,
         dropout=0.5,
+        node_level=cfg.gat_node_level,
     ).to(device)
     criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(
@@ -155,11 +157,25 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
 
 
 def stage_train_lstm(df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str):
-    train_seq, val_seq = prepare_sequence_data(
-        df, train_df=train_df, val_df=val_df, seed=cfg.seed
-    )
-    X_train_pad, X_train_len, y_train, _ = make_padded_dataset(train_seq, num_classes)
-    X_val_pad, X_val_len, y_val, _ = make_padded_dataset(val_seq, num_classes)
+    from modules._fast import build_padded_prefixes_fast
+
+    if build_padded_prefixes_fast is not None:
+        # Rust hot path: skips the Python-level prefix loop entirely.
+        # Returns numpy arrays; torch.from_numpy is a zero-copy view.
+        Xt, lt, yt, _ = build_padded_prefixes_fast(train_df)
+        Xv, lv, yv, _ = build_padded_prefixes_fast(val_df)
+        X_train_pad = torch.from_numpy(Xt)
+        X_train_len = torch.from_numpy(lt)
+        y_train = torch.from_numpy(yt)
+        X_val_pad = torch.from_numpy(Xv)
+        X_val_len = torch.from_numpy(lv)
+        y_val = torch.from_numpy(yv)
+    else:
+        train_seq, val_seq = prepare_sequence_data(
+            df, train_df=train_df, val_df=val_df, seed=cfg.seed
+        )
+        X_train_pad, X_train_len, y_train, _ = make_padded_dataset(train_seq, num_classes)
+        X_val_pad, X_val_len, y_val, _ = make_padded_dataset(val_seq, num_classes)
 
     model = NextActivityLSTM(
         num_classes, emb_dim=cfg.hidden_dim, hidden_dim=cfg.hidden_dim, num_layers=1,

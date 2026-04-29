@@ -145,15 +145,22 @@ def spectral_cluster_graph(adj_matrix, k=2, normalized=True, random_state=42):
     return KMeans(n_clusters=k, n_init=10, random_state=random_state).fit(embedding).labels_
 
 def build_task_adjacency(df, num_tasks):
+    """Build adjacency matrix weighted by transition frequencies.
+
+    Prefers the Rust kernel when `pm_fast` is installed; falls back to
+    a pure-Python groupby loop otherwise. Both implementations require
+    `df` to be sorted by (case_id, timestamp), which matches the output
+    of `load_and_preprocess_data`.
     """
-    Build adjacency matrix weighted by transition frequencies
-    """
+    from modules._fast import build_task_adjacency_fast
+
+    if build_task_adjacency_fast is not None:
+        return build_task_adjacency_fast(df, num_tasks)
+
     A = np.zeros((num_tasks, num_tasks), dtype=np.float32)
-    for cid, cdata in df.groupby("case_id"):
+    for _cid, cdata in df.groupby("case_id"):
         cdata = cdata.sort_values("timestamp")
         tasks_seq = cdata["task_id"].values
-        for i in range(len(tasks_seq)-1):
-            src = tasks_seq[i]
-            tgt = tasks_seq[i+1]
-            A[src, tgt] += 1.0
+        for i in range(len(tasks_seq) - 1):
+            A[tasks_seq[i], tasks_seq[i + 1]] += 1.0
     return A 

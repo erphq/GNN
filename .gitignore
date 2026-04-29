@@ -46,3 +46,6 @@ experiment_results.txt
 .DS_Store
 .env
 .env.local 
+# Rust build outputs (Cargo.lock is committed for reproducible builds)
+pm_fast/target/
+.venv/

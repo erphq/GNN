@@ -34,6 +34,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+      - uses: dtolnay/rust-toolchain@stable
       - name: install runtime + dev deps (CPU torch)
         run: |
           python -m pip install --upgrade pip
@@ -47,6 +48,27 @@ jobs:
             matplotlib \
             seaborn \
             plotly \
-            pytest
+            pytest \
+            maturin
+      - name: build pm_fast (Rust hot-path extension)
+        # Builds and installs the pm_fast wheel into the Python env.
+        # Tests pick it up automatically via modules._fast; if this step
+        # is removed the suite still passes via the Python fallback.
+        working-directory: pm_fast
+        run: maturin develop --release
       - name: pytest
         run: pytest -q
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: cargo fmt
+        working-directory: pm_fast
+        run: cargo fmt --check
+      - name: cargo clippy
+        working-directory: pm_fast
+        run: cargo clippy --release -- -D warnings

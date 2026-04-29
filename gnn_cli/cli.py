@@ -45,6 +45,12 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--gat-layers", type=int, default=2)
     p.add_argument("--rl-episodes", type=int, default=30)
     p.add_argument("--clusters", type=int, default=3)
+    p.add_argument(
+        "--gat-graph-label",
+        action="store_true",
+        help="Use the legacy v0.2 graph-level GAT head "
+             "(modal next-task per case) instead of the default node-level head.",
+    )
 
     p.add_argument("--skip-gat", action="store_true")
     p.add_argument("--skip-lstm", action="store_true")
@@ -73,6 +79,7 @@ def _cfg_from_args(args: argparse.Namespace):
         gat_layers=args.gat_layers,
         rl_episodes=args.rl_episodes,
         clusters=args.clusters,
+        gat_node_level=not args.gat_graph_label,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,

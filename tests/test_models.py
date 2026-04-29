@@ -20,7 +20,8 @@ from models.lstm_model import (
 )
 
 
-def test_gat_forward_runs(synthetic_event_log):
+def test_gat_forward_runs_node_level(synthetic_event_log):
+    """Default (node-level) head emits one logit row per event."""
     df, le_task, _ = encode_categoricals(synthetic_event_log)
     scaler, _ = fit_feature_scaler(df)
     df = apply_feature_scaler(df, scaler)
@@ -32,24 +33,63 @@ def test_gat_forward_runs(synthetic_event_log):
     )
     batch = torch.zeros(g.x.shape[0], dtype=torch.long)
     out = model(g.x, g.edge_index, batch)
-    assert out.shape == (1, len(le_task.classes_))
+    assert out.shape == (g.x.shape[0], len(le_task.classes_))
 
 
-def test_gat_backward_flows(synthetic_event_log):
+def test_gat_forward_runs_graph_level(synthetic_event_log):
+    """Legacy v0.2 path: with node_level=False, output is one row per graph."""
     df, le_task, _ = encode_categoricals(synthetic_event_log)
     scaler, _ = fit_feature_scaler(df)
     df = apply_feature_scaler(df, scaler)
     graphs = build_graph_data(df)
     g = graphs[0]
-    model = NextTaskGAT(5, 8, len(le_task.classes_), num_layers=1, heads=2, dropout=0.0)
+    model = NextTaskGAT(
+        input_dim=5, hidden_dim=8, output_dim=len(le_task.classes_),
+        num_layers=2, heads=2, dropout=0.0,
+        node_level=False,
+    )
+    batch = torch.zeros(g.x.shape[0], dtype=torch.long)
+    out = model(g.x, g.edge_index, batch)
+    assert out.shape == (1, len(le_task.classes_))
+
+
+def test_gat_backward_flows_node_level(synthetic_event_log):
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    scaler, _ = fit_feature_scaler(df)
+    df = apply_feature_scaler(df, scaler)
+    graphs = build_graph_data(df)
+    g = graphs[0]
+    model = NextTaskGAT(
+        5, 8, len(le_task.classes_), num_layers=1, heads=2, dropout=0.0,
+    )
+    batch = torch.zeros(g.x.shape[0], dtype=torch.long)
+    out = model(g.x, g.edge_index, batch)
+    # Per-node labels come straight from g.y (already per-event).
+    loss = torch.nn.functional.cross_entropy(out, g.y.long())
+    loss.backward()
+    for name, p in model.named_parameters():
+        if (p.requires_grad and "convs.0" in name) or "fc" in name:
+            assert p.grad is not None, name
+
+
+def test_gat_backward_flows_graph_level(synthetic_event_log):
+    """Regression test for the legacy graph-level head."""
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    scaler, _ = fit_feature_scaler(df)
+    df = apply_feature_scaler(df, scaler)
+    graphs = build_graph_data(df)
+    g = graphs[0]
+    model = NextTaskGAT(
+        5, 8, len(le_task.classes_), num_layers=1, heads=2, dropout=0.0,
+        node_level=False,
+    )
     batch = torch.zeros(g.x.shape[0], dtype=torch.long)
     out = model(g.x, g.edge_index, batch)
     label = compute_graph_label(g.y, batch).long()
     loss = torch.nn.functional.cross_entropy(out, label)
     loss.backward()
-    # Every parameter that's part of the live forward must have a gradient.
     for name, p in model.named_parameters():
-        if p.requires_grad and "convs.0" in name or "fc" in name:
+        if (p.requires_grad and "convs.0" in name) or "fc" in name:
             assert p.grad is not None, name
 
 
