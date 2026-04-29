@@ -164,6 +164,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_cl.add_argument("--out-dir", default="results")
     p_cl.add_argument("--seed", type=int, default=42)
 
+    p_df = sub.add_parser(
+        "diff",
+        help="Compare two run directories' metrics and emit a markdown report.",
+    )
+    p_df.add_argument("run_a", help="Path to first run_<timestamp>/ dir.")
+    p_df.add_argument("run_b", help="Path to second run_<timestamp>/ dir.")
+    p_df.add_argument("--out", default=None,
+                      help="Write the report to this path instead of stdout.")
+
     p_ex = sub.add_parser(
         "explain",
         help="Run the trained GAT on a single case and dump per-event "
@@ -250,6 +259,21 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     )
     stage_analyze(df, run_dir)
     print(f"Done. Analysis saved in {run_dir}")
+    return EXIT_OK
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    from gnn_cli.diff import write_diff
+
+    for path in (args.run_a, args.run_b):
+        if not os.path.exists(path):
+            print(f"error: run dir not found: {path}", file=sys.stderr)
+            return EXIT_DATA
+    report = write_diff(args.run_a, args.run_b, out_path=args.out)
+    if args.out:
+        print(f"Wrote diff to {args.out}")
+    else:
+        print(report)
     return EXIT_OK
 
 
@@ -396,6 +420,7 @@ COMMANDS = {
     "cluster": cmd_cluster,
     "baseline": cmd_baseline,
     "explain": cmd_explain,
+    "diff": cmd_diff,
     "smoke": cmd_smoke,
     "version": cmd_version,
 }
