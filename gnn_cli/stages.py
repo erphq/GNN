@@ -175,6 +175,7 @@ def stage_train_gat(
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "mcc": float(matthews_corrcoef(y_true, y_pred)),
     }
+    metrics.update(per_class_metrics(y_true, y_pred, le_task.classes_))
     if baseline is not None:
         # Lift over Markov is what tells you if the GAT learned anything
         # beyond the trivial 1-st order baseline. A near-zero lift means
@@ -212,6 +213,7 @@ def stage_train_gat(
 def stage_train_lstm(
     df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str,
     baseline: Optional[dict] = None,
+    le_task=None,
 ):
     # The Rust hot path doesn't carry dt targets yet, so it's only
     # safe when the time head is off. With predict_time on, fall back
@@ -265,7 +267,13 @@ def stage_train_lstm(
     )
     from sklearn.metrics import accuracy_score
 
-    lstm_metrics = {"accuracy": float(accuracy_score(y_val.numpy(), preds))}
+    y_true_lstm = y_val.numpy()
+    lstm_metrics = {"accuracy": float(accuracy_score(y_true_lstm, preds))}
+    class_names = (
+        list(le_task.classes_) if le_task is not None
+        else [str(i) for i in range(num_classes)]
+    )
+    lstm_metrics.update(per_class_metrics(y_true_lstm, preds, class_names))
     if baseline is not None:
         lstm_metrics["lift_over_markov"] = float(
             lstm_metrics["accuracy"] - baseline["markov_accuracy"]
@@ -302,6 +310,39 @@ def stage_train_lstm(
         )
 
     save_metrics(lstm_metrics, run_dir, "lstm_metrics.json")
+
+
+def per_class_metrics(y_true, y_pred, class_names) -> dict:
+    """Per-class precision, recall, F1, support + macro / weighted F1.
+
+    Macro F1 averages equally across classes — surfaces rare-class
+    performance. Weighted F1 averages by support — closer to overall
+    accuracy. Reporting both is the honest move on imbalanced logs.
+    """
+    from sklearn.metrics import precision_recall_fscore_support
+
+    p, r, f, s = precision_recall_fscore_support(
+        y_true, y_pred,
+        labels=list(range(len(class_names))),
+        zero_division=0,
+    )
+    macro_f1 = float(f.mean())
+    total = float(s.sum())
+    weighted_f1 = float((f * s).sum() / total) if total > 0 else 0.0
+    per_class = {
+        str(class_names[i]): {
+            "precision": float(p[i]),
+            "recall": float(r[i]),
+            "f1": float(f[i]),
+            "support": int(s[i]),
+        }
+        for i in range(len(class_names))
+    }
+    return {
+        "per_class": per_class,
+        "macro_f1": macro_f1,
+        "weighted_f1": weighted_f1,
+    }
 
 
 def stage_baselines(train_df, val_df, run_dir: str) -> dict:
@@ -442,7 +483,10 @@ def run_full_pipeline(data_path: str, cfg: RunConfig) -> str:
 
     if not cfg.skip_lstm:
         print("\n[3/9] Train LSTM")
-        stage_train_lstm(df, train_df, val_df, num_classes, cfg, device, run_dir, baseline=baseline)
+        stage_train_lstm(
+            df, train_df, val_df, num_classes, cfg, device, run_dir,
+            baseline=baseline, le_task=le_task,
+        )
     else:
         print("\n[3/9] Train LSTM — skipped")
 

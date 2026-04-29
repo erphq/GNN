@@ -221,3 +221,18 @@ def test_lstm_temperature_calibration_returns_positive_scalar(synthetic_event_lo
     # No training — just exercise the calibration loop on noise.
     T = fit_temperature_lstm(model, Xp[:32], Xl[:32], y[:32], batch_size=16, device=torch.device("cpu"))
     assert T > 0 and T == T  # finite, positive
+
+
+def test_per_class_metrics_shape():
+    """per_class_metrics carries one row per class plus macro / weighted F1."""
+    from gnn_cli.stages import per_class_metrics
+    import numpy as np
+
+    y_true = np.array([0, 0, 1, 1, 2])
+    y_pred = np.array([0, 1, 1, 1, 0])
+    out = per_class_metrics(y_true, y_pred, class_names=["A", "B", "C"])
+    assert set(out["per_class"].keys()) == {"A", "B", "C"}
+    for v in out["per_class"].values():
+        assert {"precision", "recall", "f1", "support"} <= v.keys()
+    assert 0.0 <= out["macro_f1"] <= 1.0
+    assert 0.0 <= out["weighted_f1"] <= 1.0
