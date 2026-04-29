@@ -157,6 +157,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_cl.add_argument("--out-dir", default="results")
     p_cl.add_argument("--seed", type=int, default=42)
 
+    p_bl = sub.add_parser(
+        "baseline",
+        help="Score null + Markov baselines on a CSV. The scientific floor "
+             "every trained-model accuracy should be compared against.",
+    )
+    p_bl.add_argument("data_path")
+    p_bl.add_argument("--out-dir", default="results")
+    p_bl.add_argument("--seed", type=int, default=42)
+    p_bl.add_argument("--val-frac", type=float, default=0.2)
+    p_bl.add_argument(
+        "--split-mode", choices=("case", "temporal"), default="case",
+    )
+
     p_sm = sub.add_parser(
         "smoke",
         help="Generate synthetic data and run an abbreviated pipeline end-to-end.",
@@ -210,6 +223,44 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     )
     stage_analyze(df, run_dir)
     print(f"Done. Analysis saved in {run_dir}")
+    return EXIT_OK
+
+
+def cmd_baseline(args: argparse.Namespace) -> int:
+    from gnn_cli.stages import (
+        save_metrics,
+        setup_results_dir,
+        stage_baselines,
+        stage_preprocess,
+    )
+
+    if not os.path.exists(args.data_path):
+        print(f"error: dataset not found at {args.data_path}", file=sys.stderr)
+        return EXIT_DATA
+
+    run_dir = setup_results_dir(args.out_dir)
+    print(f"Results will be saved in: {run_dir}")
+    df, train_df, val_df, le_task, le_resource, _, _ = stage_preprocess(
+        args.data_path, val_frac=args.val_frac, seed=args.seed,
+        split_mode=args.split_mode,
+    )
+    save_metrics(
+        {
+            "num_tasks": int(len(le_task.classes_)),
+            "num_resources": int(len(le_resource.classes_)),
+            "num_cases_total": int(df["case_id"].nunique()),
+            "num_cases_train": int(train_df["case_id"].nunique()),
+            "num_cases_val": int(val_df["case_id"].nunique()),
+        },
+        run_dir, "preprocessing_info.json",
+    )
+    metrics = stage_baselines(train_df, val_df, run_dir)
+    print(
+        f"most-common acc={metrics['most_common_accuracy']:.4f}, "
+        f"markov acc={metrics['markov_accuracy']:.4f} "
+        f"(coverage={metrics['markov_coverage']:.2f}, "
+        f"n_val_events={metrics['num_val_events']})"
+    )
     return EXIT_OK
 
 
@@ -271,6 +322,7 @@ COMMANDS = {
     "run": cmd_run,
     "analyze": cmd_analyze,
     "cluster": cmd_cluster,
+    "baseline": cmd_baseline,
     "smoke": cmd_smoke,
     "version": cmd_version,
 }

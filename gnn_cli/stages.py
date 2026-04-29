@@ -127,7 +127,10 @@ def stage_preprocess(
     return df, train_df, val_df, le_task, le_resource, scaler, mode
 
 
-def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: str):
+def stage_train_gat(
+    train_df, val_df, le_task, cfg: RunConfig, device, run_dir: str,
+    baseline: Optional[dict] = None,
+):
     train_loader = DataLoader(
         build_graph_data(train_df, causal=cfg.gat_causal),
         batch_size=cfg.batch_size_gat, shuffle=True,
@@ -171,6 +174,16 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "mcc": float(matthews_corrcoef(y_true, y_pred)),
     }
+    if baseline is not None:
+        # Lift over Markov is what tells you if the GAT learned anything
+        # beyond the trivial 1-st order baseline. A near-zero lift means
+        # the gain is class-imbalance, not process structure.
+        metrics["lift_over_markov"] = float(
+            metrics["accuracy"] - baseline["markov_accuracy"]
+        )
+        metrics["lift_over_most_common"] = float(
+            metrics["accuracy"] - baseline["most_common_accuracy"]
+        )
     if cfg.gat_predict_time:
         metrics["dt_mae_hours"] = float(getattr(model, "last_dt_mae_hours", float("nan")))
         metrics["time_loss_weight"] = float(cfg.time_loss_weight)
@@ -195,7 +208,10 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
     save_metrics(metrics, run_dir, "gat_metrics.json")
 
 
-def stage_train_lstm(df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str):
+def stage_train_lstm(
+    df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str,
+    baseline: Optional[dict] = None,
+):
     from modules._fast import build_padded_prefixes_fast
 
     if build_padded_prefixes_fast is not None:
@@ -229,10 +245,29 @@ def stage_train_lstm(df, train_df, val_df, num_classes, cfg: RunConfig, device, 
     )
     from sklearn.metrics import accuracy_score
 
-    save_metrics(
-        {"accuracy": float(accuracy_score(y_val.numpy(), preds))},
-        run_dir, "lstm_metrics.json",
-    )
+    lstm_metrics = {"accuracy": float(accuracy_score(y_val.numpy(), preds))}
+    if baseline is not None:
+        lstm_metrics["lift_over_markov"] = float(
+            lstm_metrics["accuracy"] - baseline["markov_accuracy"]
+        )
+        lstm_metrics["lift_over_most_common"] = float(
+            lstm_metrics["accuracy"] - baseline["most_common_accuracy"]
+        )
+    save_metrics(lstm_metrics, run_dir, "lstm_metrics.json")
+
+
+def stage_baselines(train_df, val_df, run_dir: str) -> dict:
+    """Fit + score the null and Markov baselines on the val set.
+
+    Run early in the pipeline so later stages can compute lift over
+    Markov when reporting their own accuracy. Returns the metrics dict
+    so the caller doesn't have to re-read the JSON.
+    """
+    from models.baselines import evaluate_baselines
+
+    metrics = evaluate_baselines(train_df, val_df)
+    save_metrics(metrics, run_dir, "baseline_metrics.json")
+    return metrics
 
 
 def stage_analyze(df, run_dir: str):
@@ -342,15 +377,24 @@ def run_full_pipeline(data_path: str, cfg: RunConfig) -> str:
     )
     num_classes = len(le_task.classes_)
 
+    # Baselines first so the GAT/LSTM stages can record lift over them.
+    print("\n[1.5/9] Baselines (null + Markov)")
+    baseline = stage_baselines(train_df, val_df, run_dir)
+    print(
+        f"  most-common acc={baseline['most_common_accuracy']:.4f}, "
+        f"markov acc={baseline['markov_accuracy']:.4f} "
+        f"(coverage={baseline['markov_coverage']:.2f})"
+    )
+
     if not cfg.skip_gat:
         print("\n[2/9] Train + eval GAT")
-        stage_train_gat(train_df, val_df, le_task, cfg, device, run_dir)
+        stage_train_gat(train_df, val_df, le_task, cfg, device, run_dir, baseline=baseline)
     else:
         print("\n[2/9] Train + eval GAT — skipped")
 
     if not cfg.skip_lstm:
         print("\n[3/9] Train LSTM")
-        stage_train_lstm(df, train_df, val_df, num_classes, cfg, device, run_dir)
+        stage_train_lstm(df, train_df, val_df, num_classes, cfg, device, run_dir, baseline=baseline)
     else:
         print("\n[3/9] Train LSTM — skipped")
 
