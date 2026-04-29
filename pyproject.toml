@@ -22,8 +22,22 @@ classifiers = [
 Homepage = "https://github.com/erphq/gnn"
 Issues = "https://github.com/erphq/gnn/issues"
 
+[project.scripts]
+gnn = "gnn_cli.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=7", "ruff>=0.4"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["gnn_cli*", "models*", "modules*", "visualization*"]
+exclude = ["tests*", "input*", "results*"]
 
 [tool.ruff]
 line-length = 100

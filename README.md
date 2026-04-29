@@ -17,6 +17,10 @@ A research codebase combining **Graph Attention Networks**, **LSTMs**, **classic
 ```
 .
 ├── input/                       # sample event logs (BPI2020 included)
+├── gnn_cli/                     # `gnn` CLI: argparse, stage orchestration, smoke generator
+│   ├── cli.py                   #   subcommands: run / analyze / cluster / smoke / version
+│   ├── stages.py                #   pipeline stages, each callable in isolation
+│   └── smoke.py                 #   synthetic event-log generator
 ├── models/
 │   ├── gat_model.py             # Graph Attention Network for next-task prediction
 │   └── lstm_model.py            # LSTM next-activity model
@@ -29,8 +33,8 @@ A research codebase combining **Graph Attention Networks**, **LSTMs**, **classic
 │   └── process_viz.py           # confusion matrix, Sankey, transition heatmap, ...
 ├── tests/                       # pytest suite, synthetic event log fixtures
 ├── .github/workflows/ci.yml     # ruff + pytest on push / PR
-├── pyproject.toml               # project metadata + ruff + pytest config
-└── main.py                      # end-to-end pipeline (CLI: argparse)
+├── pyproject.toml               # project metadata + `gnn` script + ruff + pytest config
+└── main.py                      # legacy entry point (delegates to gnn_cli)
 ```
 
 ## Capability surface
@@ -50,6 +54,7 @@ cd gnn
 python -m venv .venv && source .venv/bin/activate
 pip install --index-url https://download.pytorch.org/whl/cpu torch  # or a CUDA wheel
 pip install -r requirements.txt
+pip install -e .            # installs the `gnn` CLI entry point
 ```
 
 ## Data format
@@ -70,19 +75,30 @@ auto-renamed.
 
 ## Usage
 
+The repo ships a `gnn` CLI with subcommands. After `pip install -e .`:
+
+```bash
+gnn smoke                                  # synthetic data, ~1 minute end-to-end (no real data needed)
+gnn run input/BPI2020_DomesticDeclarations.csv
+gnn analyze input/BPI2020_DomesticDeclarations.csv   # process-mining stats only
+gnn cluster input/BPI2020_DomesticDeclarations.csv   # spectral clustering only
+```
+
+`gnn run --help` lists every flag. The most useful ones:
+
+```bash
+gnn run input/BPI2020_DomesticDeclarations.csv \
+  --epochs-gat 30 --epochs-lstm 10 \
+  --hidden-dim 128 --gat-heads 8 \
+  --val-frac 0.2 --seed 42 \
+  --skip-rl                                # any stage can be skipped: --skip-{gat,lstm,analyze,viz,cluster,rl}
+```
+
+The legacy entry point still works for backward compatibility:
+
 ```bash
 python main.py input/BPI2020_DomesticDeclarations.csv
 ```
-
-All hyperparameters are exposed via `argparse`:
-
-```bash
-python main.py input/BPI2020_DomesticDeclarations.csv \
-  --epochs-gat 30 --epochs-lstm 10 --hidden-dim 128 \
-  --gat-heads 8 --val-frac 0.2 --seed 42
-```
-
-`python main.py --help` for the full list.
 
 Output goes to `results/run_YYYYMMDD_HHMMSS/`:
 
@@ -94,6 +110,13 @@ results/run_…/
 ├── analysis/           # process-mining outputs
 └── policies/           # learned RL policy
 ```
+
+### Exit codes
+
+- `0` — success
+- `2` — usage error (bad args / value out of range)
+- `3` — data error (missing file, bad columns, unparseable timestamps)
+- `4` — runtime error (model / training crash)
 
 ## Methodology notes (v0.2 audit)
 
