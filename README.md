@@ -1,19 +1,11 @@
 <div align="center">
 
-```
-   ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-   ┃                                                              ┃
-   ┃   ┏━━┓┏┓╻┏┓╻         process mining · graph attention        ┃
-   ┃   ┃┏┓┃┃┗┫┃┗┫         lstm · spectral · tabular rl            ┃
-   ┃   ┃┗┛┃╹ ╹╹ ╹         pm4py · pyo3 hot-paths · single CLI     ┃
-   ┃   ┗━━┛                                                       ┃
-   ┃                                                              ┃
-   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-```
+# `gnn`
 
-# **gnn** — process mining with graph neural networks
+### process mining with graph neural networks
 
 **Predict the next event. Find the bottleneck. Recommend the resource.**
+
 One CLI, one event log, six questions answered.
 
 [![ci](https://github.com/erphq/gnn/actions/workflows/ci.yml/badge.svg)](https://github.com/erphq/gnn/actions/workflows/ci.yml)
