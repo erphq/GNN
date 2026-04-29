@@ -5,11 +5,11 @@
 LSTM model for next activity prediction in process mining
 """
 
+import random
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-import random
 
 class NextActivityLSTM(nn.Module):
     """
