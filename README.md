@@ -87,7 +87,7 @@ the genuinely hot Python loops down to native.
 
 Built by **Somesh Misra** ([@mathprobro](https://x.com/mathprobro)) and
 **Shashank Dixit** ([@protosphinx](https://x.com/protosphinx)) at
-[ERP.AI Research](https://www.erp.ai).
+[ERP•AI Research](https://www.erp.ai).
 
 ## Install
 
@@ -303,7 +303,7 @@ milestones are the ones that get merged fast.
   author    = {Misra, Somesh and Dixit, Shashank},
   title     = {Process Mining with Graph Neural Networks},
   year      = {2025},
-  publisher = {ERP.AI},
+  publisher = {ERP•AI},
   url       = {https://github.com/erphq/gnn}
 }
 ```
