@@ -115,6 +115,14 @@ def encode_categoricals(
     df["resource_id"] = le_resource.fit_transform(df["resource"].astype(str))
 
     df["next_task"] = df.groupby("case_id")["task_id"].shift(-1)
+    # Time delta to the next event in the same case (NaN for last event of
+    # each case, dropped together with next_task below). log1p(seconds) is
+    # used as a regression target by the optional multi-task time head;
+    # compressing the long tail of waiting times keeps the MSE well-scaled.
+    next_ts = df.groupby("case_id")["timestamp"].shift(-1)
+    dt_seconds = (next_ts - df["timestamp"]).dt.total_seconds()
+    df["dt_seconds"] = dt_seconds
+    df["dt_log"] = np.log1p(dt_seconds.clip(lower=0))
     df.dropna(subset=["next_task"], inplace=True)
     df["next_task"] = df["next_task"].astype(int)
     return df, le_task, le_resource
@@ -225,7 +233,10 @@ def build_graph_data(df: pd.DataFrame, causal: bool = True) -> List[Data]:
         else:
             edge_index = torch.empty((2, 0), dtype=torch.long)
         y = torch.tensor(cdata["next_task"].values, dtype=torch.long)
-        graphs.append(Data(x=x, edge_index=edge_index, y=y))
+        data = Data(x=x, edge_index=edge_index, y=y)
+        if "dt_log" in cdata.columns:
+            data.dt = torch.tensor(cdata["dt_log"].values, dtype=torch.float)
+        graphs.append(data)
     return graphs
 
 

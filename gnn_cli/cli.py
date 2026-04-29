@@ -58,6 +58,18 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
              "default is causal (forward-only) edges, which prevent the "
              "model from attending to events it is supposed to predict.",
     )
+    p.add_argument(
+        "--predict-time",
+        action="store_true",
+        help="Add a regression head to the GAT that predicts time-to-next-event "
+             "alongside next-task. Reports MAE in hours on the val set.",
+    )
+    p.add_argument(
+        "--time-loss-weight",
+        type=float,
+        default=0.5,
+        help="Weight on the time-prediction MSE term when --predict-time is set.",
+    )
 
     p.add_argument("--skip-gat", action="store_true")
     p.add_argument("--skip-lstm", action="store_true")
@@ -88,6 +100,8 @@ def _cfg_from_args(args: argparse.Namespace):
         clusters=args.clusters,
         gat_node_level=not args.gat_graph_label,
         gat_causal=not args.gat_bidirectional,
+        gat_predict_time=args.predict_time,
+        time_loss_weight=args.time_loss_weight,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,

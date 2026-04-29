@@ -74,6 +74,8 @@ class RunConfig:
     clusters: int = 3
     gat_node_level: bool = True
     gat_causal: bool = True
+    gat_predict_time: bool = False
+    time_loss_weight: float = 0.5
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -133,6 +135,7 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
         heads=cfg.gat_heads,
         dropout=0.5,
         node_level=cfg.gat_node_level,
+        predict_time=cfg.gat_predict_time,
     ).to(device)
     criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(
@@ -142,6 +145,7 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
     model = train_gat_model(
         model, train_loader, val_loader, criterion, optimizer, device,
         num_epochs=cfg.epochs_gat, model_path=model_path,
+        time_loss_weight=cfg.time_loss_weight,
     )
     y_true, y_pred, _ = evaluate_gat_model(model, val_loader, device)
     plot_confusion_matrix(
@@ -150,13 +154,15 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
     )
     from sklearn.metrics import accuracy_score, matthews_corrcoef
 
-    save_metrics(
-        {
-            "accuracy": float(accuracy_score(y_true, y_pred)),
-            "mcc": float(matthews_corrcoef(y_true, y_pred)),
-        },
-        run_dir, "gat_metrics.json",
-    )
+    metrics = {
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "mcc": float(matthews_corrcoef(y_true, y_pred)),
+    }
+    if cfg.gat_predict_time:
+        # populated by evaluate_gat_model when the time head is active.
+        metrics["dt_mae_hours"] = float(getattr(model, "last_dt_mae_hours", float("nan")))
+        metrics["time_loss_weight"] = float(cfg.time_loss_weight)
+    save_metrics(metrics, run_dir, "gat_metrics.json")
 
 
 def stage_train_lstm(df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str):

@@ -3,6 +3,7 @@ prefix split is case-isolated."""
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from modules.data_preprocessing import (
@@ -70,6 +71,43 @@ def test_gat_backward_flows_node_level(synthetic_event_log):
     for name, p in model.named_parameters():
         if (p.requires_grad and "convs.0" in name) or "fc" in name:
             assert p.grad is not None, name
+
+
+def test_gat_predict_time_returns_tuple_and_supervises(synthetic_event_log):
+    """Multi-task head: forward returns (logits, dt_pred); MSE backprop works."""
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    scaler, _ = fit_feature_scaler(df)
+    df = apply_feature_scaler(df, scaler)
+    graphs = build_graph_data(df)
+    g = graphs[0]
+    assert hasattr(g, "dt"), "build_graph_data must attach per-node dt when present"
+    model = NextTaskGAT(
+        5, 8, len(le_task.classes_),
+        num_layers=1, heads=2, dropout=0.0,
+        node_level=True, predict_time=True,
+    )
+    batch = torch.zeros(g.x.shape[0], dtype=torch.long)
+    out = model(g.x, g.edge_index, batch)
+    assert isinstance(out, tuple) and len(out) == 2
+    logits, dt_pred = out
+    assert dt_pred.shape == (g.x.shape[0],)
+    loss = (
+        torch.nn.functional.cross_entropy(logits, g.y.long())
+        + torch.nn.functional.mse_loss(dt_pred, g.dt)
+    )
+    loss.backward()
+    assert model.dt_head.weight.grad is not None
+
+
+def test_gat_predict_time_requires_node_level(synthetic_event_log):
+    """predict_time on the graph-level head is a configuration error."""
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    with pytest.raises(ValueError, match="node_level=True"):
+        NextTaskGAT(
+            5, 8, len(le_task.classes_),
+            num_layers=1, heads=2, dropout=0.0,
+            node_level=False, predict_time=True,
+        )
 
 
 def test_gat_backward_flows_graph_level(synthetic_event_log):
