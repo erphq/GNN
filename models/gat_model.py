@@ -14,6 +14,7 @@ prediction is made per case, supervised by the modal next-task across
 the case. Pass `node_level=False` to opt in.
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GATConv, global_mean_pool
@@ -176,8 +177,11 @@ def evaluate_gat_model(model, val_loader, device):
                 y_prob_all.append(probs[i])
                 y_true_all.append(int(labels[i]))
 
+    # `torch.tensor(list_of_numpy_arrays)` walks every element through Python;
+    # stacking via numpy first is ~10x faster on real-sized validation sets
+    # and silences the "extremely slow" warning PyTorch emits.
     return (
         torch.tensor(y_true_all),
         torch.tensor(y_pred_all),
-        torch.tensor(y_prob_all),
+        torch.from_numpy(np.stack(y_prob_all)) if y_prob_all else torch.empty(0),
     )
