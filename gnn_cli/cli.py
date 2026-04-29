@@ -51,6 +51,13 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
         help="Use the legacy v0.2 graph-level GAT head "
              "(modal next-task per case) instead of the default node-level head.",
     )
+    p.add_argument(
+        "--gat-bidirectional",
+        action="store_true",
+        help="Use legacy bidirectional event-graph edges in the GAT. The "
+             "default is causal (forward-only) edges, which prevent the "
+             "model from attending to events it is supposed to predict.",
+    )
 
     p.add_argument("--skip-gat", action="store_true")
     p.add_argument("--skip-lstm", action="store_true")
@@ -80,6 +87,7 @@ def _cfg_from_args(args: argparse.Namespace):
         rl_episodes=args.rl_episodes,
         clusters=args.clusters,
         gat_node_level=not args.gat_graph_label,
+        gat_causal=not args.gat_bidirectional,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,

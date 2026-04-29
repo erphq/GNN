@@ -73,6 +73,7 @@ class RunConfig:
     rl_episodes: int = 30
     clusters: int = 3
     gat_node_level: bool = True
+    gat_causal: bool = True
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -114,10 +115,12 @@ def stage_preprocess(data_path: str, val_frac: float, seed: int):
 
 def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: str):
     train_loader = DataLoader(
-        build_graph_data(train_df), batch_size=cfg.batch_size_gat, shuffle=True
+        build_graph_data(train_df, causal=cfg.gat_causal),
+        batch_size=cfg.batch_size_gat, shuffle=True,
     )
     val_loader = DataLoader(
-        build_graph_data(val_df), batch_size=cfg.batch_size_gat, shuffle=False
+        build_graph_data(val_df, causal=cfg.gat_causal),
+        batch_size=cfg.batch_size_gat, shuffle=False,
     )
     num_classes = len(le_task.classes_)
     class_weights = compute_class_weights(train_df, num_classes).to(device)

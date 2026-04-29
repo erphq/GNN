@@ -187,12 +187,27 @@ def split_cases(
     return df.loc[~val_mask].copy(), df.loc[val_mask].copy()
 
 
-def build_graph_data(df: pd.DataFrame) -> List[Data]:
+def build_graph_data(df: pd.DataFrame, causal: bool = True) -> List[Data]:
     """Convert a preprocessed event log into one PyG Data object per case.
 
-    Each case becomes a graph with one node per event, edges between
-    chronologically adjacent events (bidirectional), node features from
-    `feat_*` columns, and per-node `next_task` labels.
+    Each case becomes a graph with one node per event and node features
+    from ``feat_*`` columns. Per-node label is `next_task`.
+
+    Edge construction
+    -----------------
+    PyG's default ``flow='source_to_target'`` means edge ``(u, v)`` lets
+    node ``v`` aggregate from node ``u``. We connect events in
+    chronological order:
+
+    - ``causal=True`` (default) emits only forward edges
+      ``(i, i+1)``. Combined with default self-loops in ``GATConv``,
+      node *j*'s representation after K layers depends only on nodes
+      ``j, j-1, ..., j-K`` — strictly past + present, no leakage from
+      events the model is supposed to predict.
+    - ``causal=False`` emits bidirectional edges (legacy v0.3 behavior),
+      which let node *i* attend to events *j > i*. That's the
+      methodology bug fixed by causal mode; flag is preserved for
+      reproducing v0.3 numbers exactly.
     """
     feat_cols = list(FEAT_OUT_COLS)
     graphs: List[Data] = []
@@ -203,7 +218,10 @@ def build_graph_data(df: pd.DataFrame) -> List[Data]:
         if n > 1:
             src = list(range(n - 1))
             tgt = list(range(1, n))
-            edge_index = torch.tensor([src + tgt, tgt + src], dtype=torch.long)
+            if causal:
+                edge_index = torch.tensor([src, tgt], dtype=torch.long)
+            else:
+                edge_index = torch.tensor([src + tgt, tgt + src], dtype=torch.long)
         else:
             edge_index = torch.empty((2, 0), dtype=torch.long)
         y = torch.tensor(cdata["next_task"].values, dtype=torch.long)

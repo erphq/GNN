@@ -89,16 +89,35 @@ def test_class_weights_balance_inversely_with_freq(synthetic_event_log):
     assert (weights > 0).all().item()
 
 
-def test_build_graph_data_shapes(synthetic_event_log):
+def test_build_graph_data_shapes_causal(synthetic_event_log):
+    """Default causal mode: one forward edge per consecutive pair.
+
+    Forward-only edges prevent the GAT from attending to events the
+    label is asking it to predict (a one-hop look-ahead leak).
+    """
     df, le_task, _ = encode_categoricals(synthetic_event_log)
     scaler, _ = fit_feature_scaler(df)
     df = apply_feature_scaler(df, scaler)
     graphs = build_graph_data(df)
     assert len(graphs) > 0
     for g in graphs:
-        # Five features per node, matching FEATURE_COLS.
         assert g.x.shape[1] == 5
-        # Bidirectional chain → 2 edges per consecutive pair.
+        n = g.x.shape[0]
+        assert g.edge_index.shape == (2, max(0, n - 1))
+        assert g.y.shape[0] == n
+        # All edges should go strictly forward in chronological order.
+        if g.edge_index.shape[1] > 0:
+            src, tgt = g.edge_index[0], g.edge_index[1]
+            assert (tgt > src).all().item()
+
+
+def test_build_graph_data_shapes_bidirectional(synthetic_event_log):
+    """Legacy causal=False: 2 edges per consecutive pair (forward + reverse)."""
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    scaler, _ = fit_feature_scaler(df)
+    df = apply_feature_scaler(df, scaler)
+    graphs = build_graph_data(df, causal=False)
+    assert len(graphs) > 0
+    for g in graphs:
         n = g.x.shape[0]
         assert g.edge_index.shape == (2, max(0, 2 * (n - 1)))
-        assert g.y.shape[0] == n
