@@ -8,10 +8,11 @@ Includes bottleneck analysis, conformance checking, and cycle time analysis
 
 import pandas as pd
 import numpy as np
-from pm4py.objects.log.util import dataframe_utils
-from pm4py.objects.conversion.log import converter as log_converter
-from pm4py.algo.discovery.inductive import algorithm as inductive_miner
-from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
+
+# pm4py is imported lazily inside `perform_conformance_checking` because it's
+# a heavy optional dependency (~1 GB with transitive deps). Importing it at
+# module-load time forced every consumer — including unit tests — to install
+# the full PM stack just to use `analyze_bottlenecks` or `spectral_cluster`.
 
 def analyze_bottlenecks(df, freq_threshold=5):
     """
@@ -70,25 +71,28 @@ def analyze_rare_transitions(bottleneck_stats, rare_threshold=2):
     return rare_trans
 
 def perform_conformance_checking(df):
-    """
-    Perform conformance checking using inductive miner and token replay
-    """
-    df_pm = df[["case_id","task_name","timestamp"]].rename(columns={
-        "case_id": "case:concept:name",
-        "task_name": "concept:name",
-        "timestamp": "time:timestamp"
-    })
-    
+    """Inductive miner + token replay conformance check (requires pm4py)."""
+    from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
+    from pm4py.algo.discovery.inductive import algorithm as inductive_miner
+    from pm4py.objects.conversion.log import converter as log_converter
+    from pm4py.objects.conversion.process_tree import converter as pt_converter
+    from pm4py.objects.log.util import dataframe_utils
+
+    df_pm = df[["case_id", "task_name", "timestamp"]].rename(
+        columns={
+            "case_id": "case:concept:name",
+            "task_name": "concept:name",
+            "timestamp": "time:timestamp",
+        }
+    )
     df_pm = dataframe_utils.convert_timestamp_columns_in_df(df_pm)
     event_log = log_converter.apply(df_pm)
-    
+
     process_tree = inductive_miner.apply(event_log)
-    from pm4py.objects.conversion.process_tree import converter as pt_converter
     net, im, fm = pt_converter.apply(process_tree)
-    
+
     replayed = token_replay.apply(event_log, net, im, fm)
     n_deviant = sum(1 for t in replayed if not t["trace_is_fit"])
-    
     return replayed, n_deviant
 
 def analyze_transition_patterns(df):
@@ -102,32 +106,43 @@ def analyze_transition_patterns(df):
     
     return transitions, trans_count, prob_matrix
 
-def spectral_cluster_graph(adj_matrix, k=2):
+def spectral_cluster_graph(adj_matrix, k=2, normalized=True, random_state=42):
     """
-    Perform spectral clustering on process graph
+    Spectral clustering on a (possibly directed) process-task graph.
+
+    Symmetrizes the adjacency, then uses the *normalized* Laplacian
+    L_sym = I - D^{-1/2} A D^{-1/2} (Shi-Malik / Ng-Jordan-Weiss). Falls
+    back to the unnormalized Laplacian when `normalized=False`. Eigen-
+    decomposition uses `numpy.linalg.eigh` since the Laplacian is real
+    and symmetric — `eig` returns complex values in floating point and
+    is meaningfully slower on this shape.
     """
     from sklearn.cluster import KMeans
-    
-    degrees = np.sum(adj_matrix, axis=1)
-    D = np.diag(degrees)
-    L = D - adj_matrix  # unnormalized Laplacian
 
-    eigenvals, eigenvecs = np.linalg.eig(L)
-    idx = np.argsort(eigenvals)
-    eigenvals, eigenvecs = eigenvals[idx], eigenvecs[:, idx]
+    A = np.asarray(adj_matrix, dtype=np.float64)
+    A = 0.5 * (A + A.T)  # symmetrize (process graphs are inherently directed)
+    degrees = A.sum(axis=1)
+
+    if normalized:
+        # Avoid division-by-zero on isolated nodes.
+        with np.errstate(divide="ignore"):
+            d_inv_sqrt = np.where(degrees > 0, 1.0 / np.sqrt(degrees), 0.0)
+        D_inv_sqrt = np.diag(d_inv_sqrt)
+        L = np.eye(A.shape[0]) - D_inv_sqrt @ A @ D_inv_sqrt
+    else:
+        L = np.diag(degrees) - A
+
+    # eigh: real, ascending eigenvalues, orthonormal eigenvectors.
+    eigenvals, eigenvecs = np.linalg.eigh(L)
 
     if k == 2:
-        # Fiedler vector = second smallest eigenvector
-        fiedler_vec = np.real(eigenvecs[:, 1])
-        # Partition by sign
-        labels = (fiedler_vec >= 0).astype(int)
-    else:
-        # multi-cluster
-        embedding = np.real(eigenvecs[:, 1:k])
-        kmeans = KMeans(n_clusters=k, n_init=10, random_state=42).fit(embedding)
-        labels = kmeans.labels_
-        
-    return labels
+        # Fiedler vector = eigenvector of the 2nd-smallest eigenvalue.
+        fiedler = eigenvecs[:, 1]
+        return (fiedler >= 0).astype(int)
+
+    # Multi-cluster: rows of the bottom-k non-trivial eigenvectors → k-means.
+    embedding = eigenvecs[:, 1:k]
+    return KMeans(n_clusters=k, n_init=10, random_state=random_state).fit(embedding).labels_
 
 def build_task_adjacency(df, num_tasks):
     """

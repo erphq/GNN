@@ -75,17 +75,21 @@ def train_gat_model(model, train_loader, val_loader, criterion, optimizer,
     return model
 
 def compute_graph_label(y, batch):
-    """
-    Compute graph-level labels (MPS-compatible)
+    """Modal next_task across all events of each case → graph-level label.
+
+    NOTE: this collapses a node-level signal (next_task differs per node)
+    into a single graph label, which is a coarser objective than typical
+    next-event prediction. A node-level head with a "predict at every
+    prefix" loss would be more aligned with the literature; this helper
+    is kept for backwards compatibility with the published configuration.
     """
     unique_batches = batch.unique()
     labels_out = []
     for bidx in unique_batches:
-        mask = (batch==bidx)
+        mask = (batch == bidx)
         yvals_cpu = y[mask].detach().cpu()
         vals, counts = torch.unique(yvals_cpu, return_counts=True)
-        lbl = vals[torch.argmax(counts)]
-        labels_out.append(lbl)
+        labels_out.append(vals[torch.argmax(counts)])
     return torch.stack(labels_out)
 
 def evaluate_gat_model(model, val_loader, device):

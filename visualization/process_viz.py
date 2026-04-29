@@ -11,7 +11,6 @@ import networkx as nx
 import plotly.graph_objects as go
 import numpy as np
 from sklearn.manifold import TSNE
-import umap
 
 def plot_confusion_matrix(y_true, y_pred, class_names, save_path="confusion_matrix.png"):
     """Plot confusion matrix"""
@@ -36,6 +35,7 @@ def plot_embeddings(embeddings, method="tsne", save_path=None):
         coords = TSNE(n_components=2, perplexity=tsne_perp, random_state=42).fit_transform(embeddings)
         title = "Task Embeddings - t-SNE"
     else:  # umap
+        import umap  # optional dep — only imported when this branch runs
         coords = umap.UMAP(n_components=2, random_state=42).fit_transform(embeddings)
         title = "Task Embeddings - UMAP"
     

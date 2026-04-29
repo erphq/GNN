@@ -1,0 +1,49 @@
+[project]
+name = "gnn-process-mining"
+version = "0.2.0"
+description = "Process mining with Graph Neural Networks, LSTMs, and tabular RL."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+  { name = "Somesh Misra" },
+  { name = "Shashank Dixit" },
+]
+keywords = ["process-mining", "gnn", "graph-attention", "pm4py", "bpi"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/erphq/gnn"
+Issues = "https://github.com/erphq/gnn/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["results", "input"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = [
+  "E501",   # line length is enforced by formatter, not the linter
+  "E741",   # ambiguous variable names — accept `l`, `O`, etc. in math code
+  "B008",   # function call in default argument is fine for our argparse pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "F841"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::FutureWarning",
+]
