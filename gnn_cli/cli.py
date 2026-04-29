@@ -77,6 +77,15 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
              "Default fits one scalar T on the val NLL so reported "
              "probabilities are calibrated; ECE before/after is recorded.",
     )
+    p.add_argument(
+        "--split-mode",
+        choices=("case", "temporal"),
+        default="case",
+        help="How to split cases into train/val. 'case' (default) is a "
+             "random case-level split. 'temporal' uses the most recent "
+             "val_frac of cases as val — closer to production deployment, "
+             "and surfaces drift that random splits hide.",
+    )
 
     p.add_argument("--skip-gat", action="store_true")
     p.add_argument("--skip-lstm", action="store_true")
@@ -110,6 +119,7 @@ def _cfg_from_args(args: argparse.Namespace):
         gat_predict_time=args.predict_time,
         time_loss_weight=args.time_loss_weight,
         calibrate=not args.no_calibrate,
+        split_mode=args.split_mode,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,

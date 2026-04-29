@@ -121,3 +121,30 @@ def test_build_graph_data_shapes_bidirectional(synthetic_event_log):
     for g in graphs:
         n = g.x.shape[0]
         assert g.edge_index.shape == (2, max(0, 2 * (n - 1)))
+
+
+def test_temporal_split_puts_recent_cases_in_val(synthetic_event_log):
+    """In temporal mode, every val case starts at-or-after every train case."""
+    df, _, _ = encode_categoricals(synthetic_event_log)
+    train, val = split_cases(df, val_frac=0.3, seed=0, mode="temporal")
+
+    train_cases = set(train["case_id"])
+    val_cases = set(val["case_id"])
+    # Case-isolation invariant still holds.
+    assert train_cases.isdisjoint(val_cases)
+
+    train_max_start = train.groupby("case_id")["timestamp"].min().max()
+    val_min_start = val.groupby("case_id")["timestamp"].min().min()
+    # Every val case starts at-or-after the latest train-case start.
+    assert val_min_start >= train_max_start
+
+
+def test_split_mode_validation_rejects_unknown():
+    import pandas as pd
+    df = pd.DataFrame({"case_id": ["a"], "timestamp": [pd.Timestamp("2026-01-01", tz="UTC")]})
+    try:
+        split_cases(df, mode="random_garbage")
+    except ValueError as e:
+        assert "case" in str(e) and "temporal" in str(e)
+    else:
+        raise AssertionError("split_cases should reject unknown mode")

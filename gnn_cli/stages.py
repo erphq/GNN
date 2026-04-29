@@ -83,6 +83,7 @@ class RunConfig:
     gat_predict_time: bool = False
     time_loss_weight: float = 0.5
     calibrate: bool = True
+    split_mode: str = "case"
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -108,14 +109,18 @@ def save_metrics(metrics: dict, run_dir: str, filename: str) -> None:
         json.dump(metrics, f, indent=4, default=str)
 
 
-def stage_preprocess(data_path: str, val_frac: float, seed: int):
+def stage_preprocess(
+    data_path: str, val_frac: float, seed: int, split_mode: str = "case"
+):
     """Load CSV → encode → case-level split → fit+apply scaler.
 
     Returns (df, train_df, val_df, le_task, le_resource, scaler, mode).
     """
     df = load_and_preprocess_data(data_path)
     df, le_task, le_resource = encode_categoricals(df)
-    train_df, val_df = split_cases(df, val_frac=val_frac, seed=seed)
+    train_df, val_df = split_cases(
+        df, val_frac=val_frac, seed=seed, mode=split_mode
+    )
     scaler, mode = fit_feature_scaler(train_df, use_norm_features=True)
     train_df = apply_feature_scaler(train_df, scaler)
     val_df = apply_feature_scaler(val_df, scaler)
@@ -320,7 +325,7 @@ def run_full_pipeline(data_path: str, cfg: RunConfig) -> str:
 
     print("\n[1/9] Preprocess")
     df, train_df, val_df, le_task, le_resource, _, mode = stage_preprocess(
-        data_path, cfg.val_frac, cfg.seed
+        data_path, cfg.val_frac, cfg.seed, split_mode=cfg.split_mode
     )
     save_metrics(
         {

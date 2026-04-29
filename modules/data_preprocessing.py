@@ -178,19 +178,42 @@ def split_cases(
     df: pd.DataFrame,
     val_frac: float = 0.2,
     seed: int = 42,
+    mode: str = "case",
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Split rows into (train_df, val_df) by sampling whole *case_ids*.
+    """Split rows into (train_df, val_df) at the *case* level.
 
-    Critical for any next-event prediction: events from one case must not
-    appear in both halves, or future leaks into past during evaluation.
+    Two modes:
+
+    - ``mode='case'`` (default) — sample whole case_ids uniformly at
+      random into the val set. Standard cross-section evaluation.
+    - ``mode='temporal'`` — order cases by their start timestamp and
+      put the most recent ``val_frac`` cases into the val set. This
+      mimics the production deployment scenario where the model is
+      trained on past cases and applied to future ones; it surfaces
+      drift that random splits hide.
+
+    Both modes guarantee no events from a case appear in both halves
+    (the v0.2 audit's load-bearing invariant).
     """
     if not 0 < val_frac < 1:
         raise ValueError(f"val_frac must be in (0, 1), got {val_frac}")
-    case_ids = np.array(sorted(df["case_id"].unique()))
-    rng = np.random.default_rng(seed)
-    rng.shuffle(case_ids)
-    n_val = max(1, int(round(len(case_ids) * val_frac)))
-    val_cases = set(case_ids[:n_val].tolist())
+    if mode not in ("case", "temporal"):
+        raise ValueError(f"mode must be 'case' or 'temporal', got {mode!r}")
+
+    if mode == "case":
+        case_ids = np.array(sorted(df["case_id"].unique()))
+        rng = np.random.default_rng(seed)
+        rng.shuffle(case_ids)
+        n_val = max(1, int(round(len(case_ids) * val_frac)))
+        val_cases = set(case_ids[:n_val].tolist())
+    else:  # temporal
+        # Each case's start time is the timestamp of its first event.
+        # Sort cases by that, take the last val_frac as val.
+        case_starts = df.groupby("case_id")["timestamp"].min().sort_values()
+        n_total = len(case_starts)
+        n_val = max(1, int(round(n_total * val_frac)))
+        val_cases = set(case_starts.index[-n_val:].tolist())
+
     val_mask = df["case_id"].isin(val_cases)
     return df.loc[~val_mask].copy(), df.loc[val_mask].copy()
 
