@@ -53,18 +53,34 @@ def load_and_preprocess_data(
         required_cols = DEFAULT_REQUIRED_COLS
 
     df = pd.read_csv(data_path)
-    df.rename(
-        columns={
-            "case:id": "case_id",
-            "case:concept:name": "case_id",
-            "concept:name": "task_name",
-            "time:timestamp": "timestamp",
-            "org:resource": "resource",
-            "case:Amount": "amount",
-        },
-        inplace=True,
-        errors="ignore",
-    )
+
+    # Priority-based rename: when multiple XES-style aliases map to the
+    # same canonical name (e.g. BPI logs carry both `case:id` and
+    # `case:concept:name`), pick the first present source and drop the
+    # rest, otherwise pandas creates a duplicate-named column that
+    # downstream `df["case_id"]` access cannot disambiguate.
+    rename_priorities = {
+        "case_id": ("case:concept:name", "case:id"),
+        "task_name": ("concept:name",),
+        "timestamp": ("time:timestamp",),
+        "resource": ("org:resource",),
+        "amount": ("case:Amount",),
+    }
+    for canonical, sources in rename_priorities.items():
+        if canonical in df.columns:
+            # Already present; drop any aliases that would collide.
+            for src in sources:
+                if src in df.columns:
+                    df.drop(columns=src, inplace=True)
+            continue
+        for src in sources:
+            if src in df.columns:
+                df.rename(columns={src: canonical}, inplace=True)
+                # Drop remaining lower-priority aliases.
+                for other in sources:
+                    if other != src and other in df.columns:
+                        df.drop(columns=other, inplace=True)
+                break
 
     for c in required_cols:
         if c not in df.columns:
