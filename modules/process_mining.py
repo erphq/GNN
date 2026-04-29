@@ -71,9 +71,29 @@ def analyze_rare_transitions(bottleneck_stats, rare_threshold=2):
     return rare_trans
 
 def perform_conformance_checking(df):
-    """Inductive miner + token replay conformance check (requires pm4py)."""
+    """Inductive miner + token replay conformance check (requires pm4py).
+
+    Returns ``(replayed, summary)`` where ``summary`` carries the four
+    standard conformance numbers an analyst actually wants:
+
+    - ``num_deviant`` — count of traces token-replay flagged unfit
+    - ``fitness`` — average trace fitness in [0, 1]; 1.0 = every event
+      was reproducible by the discovered model
+    - ``precision`` — model precision via ETC alignments in [0, 1];
+      1.0 = the model never allows behavior the log never showed
+    - ``f_score`` — harmonic mean of fitness and precision
+
+    Fitness without precision rewards "any-state" models (a flower
+    model fits everything), and precision without fitness rewards
+    overfitted models. The F-score is the only single number that
+    captures both, which is why we surface all four.
+    """
     from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
     from pm4py.algo.discovery.inductive import algorithm as inductive_miner
+    from pm4py.algo.evaluation.precision import algorithm as precision_evaluator
+    from pm4py.algo.evaluation.replay_fitness import (
+        algorithm as replay_fitness_evaluator,
+    )
     from pm4py.objects.conversion.log import converter as log_converter
     from pm4py.objects.conversion.process_tree import converter as pt_converter
     from pm4py.objects.log.util import dataframe_utils
@@ -93,7 +113,33 @@ def perform_conformance_checking(df):
 
     replayed = token_replay.apply(event_log, net, im, fm)
     n_deviant = sum(1 for t in replayed if not t["trace_is_fit"])
-    return replayed, n_deviant
+
+    # pm4py exposes both metrics off the same Petri net; compute them
+    # together so the F-score below is on consistent numbers.
+    fitness = float(
+        replay_fitness_evaluator.apply(
+            event_log, net, im, fm,
+            variant=replay_fitness_evaluator.Variants.TOKEN_BASED,
+        ).get("log_fitness", 0.0)
+    )
+    precision = float(
+        precision_evaluator.apply(
+            event_log, net, im, fm,
+            variant=precision_evaluator.Variants.ETCONFORMANCE_TOKEN,
+        )
+    )
+    f_score = (
+        2 * fitness * precision / (fitness + precision)
+        if (fitness + precision) > 0 else 0.0
+    )
+
+    summary = {
+        "num_deviant": int(n_deviant),
+        "fitness": fitness,
+        "precision": precision,
+        "f_score": float(f_score),
+    }
+    return replayed, summary
 
 def analyze_transition_patterns(df):
     """

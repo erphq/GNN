@@ -94,3 +94,17 @@ def test_transition_matrix_shape(synthetic_event_log):
     # Probability rows should sum to 1 (or 0 for tasks that never transition).
     row_sums = prob.sum(axis=1).values
     assert np.allclose(row_sums[row_sums > 0], 1.0)
+
+
+def test_conformance_returns_four_metrics(synthetic_event_log):
+    """Conformance summary must carry deviant count + fitness + precision + F."""
+    from modules.process_mining import perform_conformance_checking
+
+    replayed, summary = perform_conformance_checking(synthetic_event_log)
+    assert {"num_deviant", "fitness", "precision", "f_score"} <= summary.keys()
+    assert 0.0 <= summary["fitness"] <= 1.0
+    assert 0.0 <= summary["precision"] <= 1.0
+    assert 0.0 <= summary["f_score"] <= 1.0
+    assert summary["num_deviant"] <= len(replayed)
+    # The harmonic mean is at most the smaller of the two factors.
+    assert summary["f_score"] <= max(summary["fitness"], summary["precision"]) + 1e-9

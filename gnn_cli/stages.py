@@ -234,14 +234,17 @@ def stage_analyze(df, run_dir: str):
     bottleneck_stats, significant_bottlenecks = analyze_bottlenecks(df)
     case_merged, long_cases, cut95 = analyze_cycle_times(df)
     rare_trans = analyze_rare_transitions(bottleneck_stats)
-    replayed, n_deviant = perform_conformance_checking(df)
+    replayed, conformance = perform_conformance_checking(df)
     save_metrics(
         {
             "num_long_cases": int(len(long_cases)),
             "cycle_time_95th_percentile_h": float(cut95),
             "num_rare_transitions": int(len(rare_trans)),
-            "num_deviant_traces": int(n_deviant),
+            "num_deviant_traces": int(conformance["num_deviant"]),
             "total_traces": int(len(replayed)),
+            "conformance_fitness": float(conformance["fitness"]),
+            "conformance_precision": float(conformance["precision"]),
+            "conformance_f_score": float(conformance["f_score"]),
         },
         run_dir, "process_analysis.json",
     )
