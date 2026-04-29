@@ -27,6 +27,7 @@ from models.gat_model import (
 from models.lstm_model import (
     NextActivityLSTM,
     evaluate_lstm_model,
+    fit_temperature_lstm,
     make_padded_dataset,
     prepare_sequence_data,
     train_lstm_model,
@@ -212,36 +213,55 @@ def stage_train_lstm(
     df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str,
     baseline: Optional[dict] = None,
 ):
-    from modules._fast import build_padded_prefixes_fast
+    # The Rust hot path doesn't carry dt targets yet, so it's only
+    # safe when the time head is off. With predict_time on, fall back
+    # to the Python prefix builder which threads dt_log through.
+    use_rust_path = (not cfg.gat_predict_time)
+    dt_train = dt_val = None
 
-    if build_padded_prefixes_fast is not None:
-        # Rust hot path: skips the Python-level prefix loop entirely.
-        # Returns numpy arrays; torch.from_numpy is a zero-copy view.
-        Xt, lt, yt, _ = build_padded_prefixes_fast(train_df)
-        Xv, lv, yv, _ = build_padded_prefixes_fast(val_df)
-        X_train_pad = torch.from_numpy(Xt)
-        X_train_len = torch.from_numpy(lt)
-        y_train = torch.from_numpy(yt)
-        X_val_pad = torch.from_numpy(Xv)
-        X_val_len = torch.from_numpy(lv)
-        y_val = torch.from_numpy(yv)
-    else:
+    if use_rust_path:
+        from modules._fast import build_padded_prefixes_fast
+        if build_padded_prefixes_fast is not None:
+            Xt, lt, yt, _ = build_padded_prefixes_fast(train_df)
+            Xv, lv, yv, _ = build_padded_prefixes_fast(val_df)
+            X_train_pad = torch.from_numpy(Xt)
+            X_train_len = torch.from_numpy(lt)
+            y_train = torch.from_numpy(yt)
+            X_val_pad = torch.from_numpy(Xv)
+            X_val_len = torch.from_numpy(lv)
+            y_val = torch.from_numpy(yv)
+        else:
+            use_rust_path = False  # extension not built; fall through
+
+    if not use_rust_path:
         train_seq, val_seq = prepare_sequence_data(
             df, train_df=train_df, val_df=val_df, seed=cfg.seed
         )
         X_train_pad, X_train_len, y_train, _ = make_padded_dataset(train_seq, num_classes)
         X_val_pad, X_val_len, y_val, _ = make_padded_dataset(val_seq, num_classes)
+        # When predict_time is on, the prefix builder attaches per-sample
+        # dt targets to the padded tensor as an attribute.
+        if cfg.gat_predict_time:
+            dt_train = getattr(X_train_pad, "dt_targets", None)
+            dt_val = getattr(X_val_pad, "dt_targets", None)
 
     model = NextActivityLSTM(
         num_classes, emb_dim=cfg.hidden_dim, hidden_dim=cfg.hidden_dim, num_layers=1,
+        predict_time=cfg.gat_predict_time,
     ).to(device)
     model_path = os.path.join(run_dir, "models", "lstm_next_activity.pth")
     model = train_lstm_model(
         model, X_train_pad, X_train_len, y_train, device,
-        batch_size=cfg.batch_size_lstm, epochs=cfg.epochs_lstm, model_path=model_path,
+        batch_size=cfg.batch_size_lstm, epochs=cfg.epochs_lstm,
+        model_path=model_path,
+        dt_targets=dt_train,
+        time_loss_weight=cfg.time_loss_weight,
     )
-    preds, _ = evaluate_lstm_model(
-        model, X_val_pad, X_val_len, cfg.batch_size_lstm, device
+
+    # Uncalibrated pass — accuracy + pre-cal ECE.
+    preds, probs = evaluate_lstm_model(
+        model, X_val_pad, X_val_len, cfg.batch_size_lstm, device,
+        dt_targets=dt_val,
     )
     from sklearn.metrics import accuracy_score
 
@@ -253,6 +273,34 @@ def stage_train_lstm(
         lstm_metrics["lift_over_most_common"] = float(
             lstm_metrics["accuracy"] - baseline["most_common_accuracy"]
         )
+    if cfg.gat_predict_time:
+        lstm_metrics["dt_mae_hours"] = float(
+            getattr(model, "last_dt_mae_hours", float("nan"))
+        )
+        lstm_metrics["time_loss_weight"] = float(cfg.time_loss_weight)
+
+    if cfg.calibrate:
+        ece_before = expected_calibration_error(
+            y_val.long(), torch.from_numpy(probs)
+        )
+        T = fit_temperature_lstm(
+            model, X_val_pad, X_val_len, y_val, cfg.batch_size_lstm, device
+        )
+        _, probs_cal = evaluate_lstm_model(
+            model, X_val_pad, X_val_len, cfg.batch_size_lstm, device,
+            temperature=T, dt_targets=dt_val,
+        )
+        ece_after = expected_calibration_error(
+            y_val.long(), torch.from_numpy(probs_cal)
+        )
+        lstm_metrics["temperature"] = float(T)
+        lstm_metrics["ece_before_calibration"] = float(ece_before)
+        lstm_metrics["ece_after_calibration"] = float(ece_after)
+        torch.save(
+            {"temperature": float(T)},
+            os.path.join(run_dir, "models", "lstm_calibration.pt"),
+        )
+
     save_metrics(lstm_metrics, run_dir, "lstm_metrics.json")
 
 

@@ -189,3 +189,35 @@ def test_ece_high_when_uniformly_overconfident():
     y_prob[:, 1] = 1.0
     ece = expected_calibration_error(y_true, y_prob)
     assert ece > 0.99
+
+
+def test_lstm_predict_time_returns_tuple(synthetic_event_log):
+    """Multi-task LSTM: forward returns (logits, dt_pred); both heads
+    backprop through the shared LSTM hidden state."""
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    train_seq, _ = prepare_sequence_data(df, val_frac=0.2, seed=0)
+    Xp, Xl, y, _ = make_padded_dataset(train_seq, num_cls=len(le_task.classes_))
+    assert hasattr(Xp, "dt_targets"), \
+        "make_padded_dataset must attach dt_targets when prefixes carry dt"
+
+    model = NextActivityLSTM(
+        num_cls=len(le_task.classes_), emb_dim=8, hidden_dim=8,
+        predict_time=True,
+    )
+    out = model(Xp[:4], Xl[:4])
+    assert isinstance(out, tuple) and len(out) == 2
+    logits, dt_pred = out
+    assert dt_pred.shape == (4,)
+
+
+def test_lstm_temperature_calibration_returns_positive_scalar(synthetic_event_log):
+    """fit_temperature_lstm must return a finite positive temperature."""
+    from models.lstm_model import fit_temperature_lstm
+
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    train_seq, _ = prepare_sequence_data(df, val_frac=0.2, seed=0)
+    Xp, Xl, y, _ = make_padded_dataset(train_seq, num_cls=len(le_task.classes_))
+    model = NextActivityLSTM(num_cls=len(le_task.classes_), emb_dim=8, hidden_dim=8)
+    # No training — just exercise the calibration loop on noise.
+    T = fit_temperature_lstm(model, Xp[:32], Xl[:32], y[:32], batch_size=16, device=torch.device("cpu"))
+    assert T > 0 and T == T  # finite, positive
