@@ -119,16 +119,23 @@ The codebase commits to:
 Concrete checkpoints, in rough dependency order. Tick each off only
 when the named acceptance criterion holds.
 
-- **v0.3 — Ingestion + export.** Native XES loader (`gnn run log.xes`
-  works), ONNX export for GAT and LSTM, documented schemas for every
-  JSON in `metrics/` and `analysis/`.
-- **v0.4 — Reproducibility.** A pinned lockfile workflow + a docker
-  image (`ghcr.io/erphq/gnn`) that produces bit-identical metrics for
-  the BPI 2020 sample on CPU, captured as a CI-asserted reference run.
+- **v0.3 — Methodological audit (✅ shipped).** Causal forward-only
+  GAT edges, node-level head, time-to-next-event multi-task head,
+  post-hoc temperature scaling, conformance F-score, RL state-vec fix,
+  XES alias collision fix.
+- **v0.4 — Reproducibility, baselines, ergonomics (✅ shipped).**
+  Null + Markov baselines with lift-over-baseline reporting, LSTM
+  parity (calibration + time head), `gnn explain <case_id>` attention
+  saliency, per-class P/R/F1, reference-metrics canary in CI, native
+  `.xes` / `.xes.gz` ingest, Markov-chain smoke generator, TOML
+  `--config` file, `gnn diff <run_a> <run_b>`.
 - **v0.5 — Multi-dataset benchmark.** BPI 2012 / 2017 / 2019 each have
   a one-line invocation, a published metrics table, and a regression
   test that flags drift > 1pp on next-activity accuracy.
-- **v0.6 — Rust orchestrator (prototype).** Single static binary that
+- **v0.6 — ONNX export.** `gnn export onnx <run_dir>` produces
+  inference artifacts that load in Rust / Java / browser without a
+  Python interpreter. Bridge for the next milestone.
+- **v0.7 — Rust orchestrator (prototype).** Single static binary that
   shells into Python for ML kernels but owns CLI parsing, config
   loading, scheduling, and artifact management. Same surface as
   today's `gnn` CLI; same outputs byte-for-byte.
