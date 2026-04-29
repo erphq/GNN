@@ -43,9 +43,12 @@ class ProcessEnv:
         Currently using one-hot encoding for current task
         Could be extended with more features
         """
-        state_vec = np.zeros(len(self.all_tasks), dtype=np.float32)
-        idx = self.current_task
-        state_vec[idx] = 1.0
+        # Size by the full label space, not `all_tasks`. Some encoded
+        # task_ids only appear as `next_task` and are dropped from `df`
+        # before `all_tasks` is computed, but `current_task` can still
+        # take any value in [0, len(le_task.classes_)).
+        state_vec = np.zeros(len(self.le_task.classes_), dtype=np.float32)
+        state_vec[self.current_task] = 1.0
         return state_vec
     
     def step(self, action):
