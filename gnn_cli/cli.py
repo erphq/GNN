@@ -30,6 +30,13 @@ EXIT_RUNTIME = 4
 
 def _add_run_flags(p: argparse.ArgumentParser) -> None:
     """Hyperparameter flags shared by `run` and `smoke`."""
+    p.add_argument(
+        "--config", default=None,
+        help="Path to a TOML file with run defaults. Keys can be either at "
+             "the top level or under a [run] table; flag names use snake_case "
+             "(e.g. epochs_gat = 30). CLI flags override TOML; TOML overrides "
+             "hardcoded defaults.",
+    )
     p.add_argument("--out-dir", default="results", help="Root directory for run output.")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", default=None, help="Override device (cpu / cuda / mps).")
@@ -394,8 +401,47 @@ COMMANDS = {
 }
 
 
+def _load_toml_run_config(path: str) -> dict:
+    """Read run-flag overrides from a TOML file.
+
+    Accepts either a top-level table or a [run] sub-table. Keys must
+    match argparse dest names (snake_case). Returns ``{}`` on read
+    error rather than crashing — the user gets a clear "config X not
+    found" later from the file open above.
+    """
+    try:
+        import tomllib  # py 3.11+
+    except ModuleNotFoundError:  # pragma: no cover
+        import tomli as tomllib  # type: ignore[import-not-found]
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return data.get("run", data)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
+
+    # Two-pass parse so a TOML --config can supply defaults that CLI
+    # flags override. Pass 1: peek for --config; pass 2: real parse with
+    # set_defaults applied. Subparsers all use the same shared flag set
+    # so set_defaults walks every subcommand parser.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config", default=None)
+    pre_args, _ = pre.parse_known_args(argv)
+    if pre_args.config:
+        try:
+            overrides = _load_toml_run_config(pre_args.config)
+        except FileNotFoundError:
+            print(f"error: config file not found: {pre_args.config}", file=sys.stderr)
+            return EXIT_DATA
+        # Walk every subparser and apply matching defaults; argparse
+        # quietly ignores unknown keys when set on the wrong subparser.
+        for action in parser._subparsers._group_actions[0].choices.values():
+            action.set_defaults(**{
+                k: v for k, v in overrides.items()
+                if any(a.dest == k for a in action._actions)
+            })
+
     args = parser.parse_args(argv)
     handler = COMMANDS[args.command]
     try:
