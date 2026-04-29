@@ -51,11 +51,14 @@ jobs:
             pytest \
             maturin
       - name: build pm_fast (Rust hot-path extension)
-        # Builds and installs the pm_fast wheel into the Python env.
-        # Tests pick it up automatically via modules._fast; if this step
-        # is removed the suite still passes via the Python fallback.
+        # `maturin develop` insists on a virtualenv; CI has none, so build
+        # a wheel and pip-install it instead. Tests pick it up via
+        # modules._fast; if this step fails the suite still passes via
+        # the Python fallback (just without parity coverage).
         working-directory: pm_fast
-        run: maturin develop --release
+        run: |
+          maturin build --release --out dist
+          pip install dist/*.whl
       - name: pytest
         run: pytest -q
 
