@@ -12,7 +12,7 @@ val subset with the train-fitted scaler (no leakage).
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
