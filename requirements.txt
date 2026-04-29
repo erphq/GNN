@@ -1,14 +1,25 @@
-torch>=1.9.0
-torch-geometric>=2.0.0
-torch-scatter>=2.0.9
-torch-sparse>=0.6.12
-numpy>=1.19.5
-pandas>=1.3.0
-scikit-learn>=0.24.2
-networkx>=2.6.3
-matplotlib>=3.4.3
-seaborn>=0.11.2
-plotly>=5.3.1
-pm4py>=2.2.19
-umap-learn>=0.5.1
-xgboost>=1.5.0 
+# Runtime dependencies. Versions use compatible-release ranges so
+# transitive resolution stays loose, but with upper bounds where the next
+# major has known breakage. For full reproducibility, see lockfile workflow
+# in CONTRIBUTING.md.
+
+# Core
+numpy>=1.21,<2.0          # numpy 2 breaks pm4py 2.x and torch-scatter wheels
+pandas>=1.5,<3
+scikit-learn>=1.0
+networkx>=2.6
+
+# Deep learning
+torch>=1.9
+torch-geometric>=2.5
+
+# Process mining
+pm4py>=2.7
+
+# Visualization
+matplotlib>=3.4
+seaborn>=0.11
+plotly>=5.3
+
+# Optional: enable UMAP embeddings via plot_embeddings(method="umap")
+# umap-learn>=0.5

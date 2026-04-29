@@ -5,11 +5,11 @@
 LSTM model for next activity prediction in process mining
 """
 
+import random
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-import random
 
 class NextActivityLSTM(nn.Module):
     """
@@ -35,25 +35,45 @@ class NextActivityLSTM(nn.Module):
         logits = self.fc(last_hidden)
         return logits
 
-def prepare_sequence_data(df, max_len=None):
-    """
-    Prepare sequence data for LSTM training
-    """
-    prefix_samples = []
-    for cid, cdata in df.groupby("case_id"):
+def _build_prefixes(df):
+    """Yield (prefix_task_ids, next_task_id) tuples per case."""
+    samples = []
+    for _cid, cdata in df.groupby("case_id", sort=False):
         cdata = cdata.sort_values("timestamp")
         tasks_list = cdata["task_id"].tolist()
         for i in range(1, len(tasks_list)):
-            prefix = tasks_list[:i]
-            label = tasks_list[i]
-            prefix_samples.append((prefix, label))
-    
-    random.shuffle(prefix_samples)
-    split_idx = int(0.8*len(prefix_samples))
-    train_seq = prefix_samples[:split_idx]
-    test_seq = prefix_samples[split_idx:]
-    
-    return train_seq, test_seq
+            samples.append((tasks_list[:i], tasks_list[i]))
+    return samples
+
+
+def prepare_sequence_data(df, val_frac=0.2, seed=42, train_df=None, val_df=None):
+    """
+    Build (prefix, next-task) sequence samples for LSTM training and validation.
+
+    By default, splits *cases* (not prefixes!) so no future event of a case
+    can leak into both halves. For full control, callers can pass already-split
+    `train_df` and `val_df` (e.g. from `data_preprocessing.split_cases`).
+
+    Returns (train_seq, val_seq).
+    """
+    if train_df is not None and val_df is not None:
+        train_samples = _build_prefixes(train_df)
+        val_samples = _build_prefixes(val_df)
+    else:
+        case_ids = sorted(df["case_id"].unique())
+        rng = random.Random(seed)
+        rng.shuffle(case_ids)
+        n_val = max(1, int(round(len(case_ids) * val_frac)))
+        val_cases = set(case_ids[:n_val])
+        train_df_ = df[~df["case_id"].isin(val_cases)]
+        val_df_ = df[df["case_id"].isin(val_cases)]
+        train_samples = _build_prefixes(train_df_)
+        val_samples = _build_prefixes(val_df_)
+
+    # Shuffle prefixes within each split — for batch ordering only, no leakage.
+    random.Random(seed).shuffle(train_samples)
+    random.Random(seed + 1).shuffle(val_samples)
+    return train_samples, val_samples
 
 def make_padded_dataset(sample_list, num_cls):
     """

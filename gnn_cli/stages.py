@@ -1,0 +1,328 @@
+"""Pipeline stages, each callable in isolation.
+
+The full `run` command threads them together. Standalone subcommands
+(`analyze`, `cluster`) call only the subset they need. Functions take
+plain arguments (no argparse Namespace) so they are reusable from
+notebooks or future Rust orchestrators that shell into Python.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional, Tuple
+
+import torch
+from torch_geometric.loader import DataLoader
+
+from models.gat_model import NextTaskGAT, evaluate_gat_model, train_gat_model
+from models.lstm_model import (
+    NextActivityLSTM,
+    evaluate_lstm_model,
+    make_padded_dataset,
+    prepare_sequence_data,
+    train_lstm_model,
+)
+from modules.data_preprocessing import (
+    apply_feature_scaler,
+    build_graph_data,
+    compute_class_weights,
+    encode_categoricals,
+    fit_feature_scaler,
+    load_and_preprocess_data,
+    split_cases,
+)
+from modules.process_mining import (
+    analyze_bottlenecks,
+    analyze_cycle_times,
+    analyze_rare_transitions,
+    analyze_transition_patterns,
+    build_task_adjacency,
+    perform_conformance_checking,
+    spectral_cluster_graph,
+)
+from modules.rl_optimization import ProcessEnv, get_optimal_policy, run_q_learning
+from visualization.process_viz import (
+    create_sankey_diagram,
+    plot_confusion_matrix,
+    plot_cycle_time_distribution,
+    plot_process_flow,
+    plot_transition_heatmap,
+)
+
+
+@dataclass
+class RunConfig:
+    """Hyperparameters and skip flags for the full pipeline."""
+
+    out_dir: str = "results"
+    seed: int = 42
+    device: Optional[str] = None
+    val_frac: float = 0.2
+    batch_size_gat: int = 32
+    batch_size_lstm: int = 64
+    epochs_gat: int = 20
+    epochs_lstm: int = 5
+    lr_gat: float = 5e-4
+    lr_lstm: float = 1e-3
+    hidden_dim: int = 64
+    gat_heads: int = 4
+    gat_layers: int = 2
+    rl_episodes: int = 30
+    clusters: int = 3
+
+    skip_gat: bool = False
+    skip_lstm: bool = False
+    skip_analyze: bool = False
+    skip_viz: bool = False
+    skip_cluster: bool = False
+    skip_rl: bool = False
+
+    rl_resources: Tuple[int, ...] = field(default_factory=lambda: (0, 1))
+
+
+def setup_results_dir(out_root: str) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base = out_root if os.path.isabs(out_root) else os.path.join(os.getcwd(), out_root)
+    run_dir = os.path.join(base, f"run_{timestamp}")
+    for sub in ("models", "visualizations", "metrics", "analysis", "policies"):
+        os.makedirs(os.path.join(run_dir, sub), exist_ok=True)
+    return run_dir
+
+
+def save_metrics(metrics: dict, run_dir: str, filename: str) -> None:
+    with open(os.path.join(run_dir, "metrics", filename), "w") as f:
+        json.dump(metrics, f, indent=4, default=str)
+
+
+def stage_preprocess(data_path: str, val_frac: float, seed: int):
+    """Load CSV → encode → case-level split → fit+apply scaler.
+
+    Returns (df, train_df, val_df, le_task, le_resource, scaler, mode).
+    """
+    df = load_and_preprocess_data(data_path)
+    df, le_task, le_resource = encode_categoricals(df)
+    train_df, val_df = split_cases(df, val_frac=val_frac, seed=seed)
+    scaler, mode = fit_feature_scaler(train_df, use_norm_features=True)
+    train_df = apply_feature_scaler(train_df, scaler)
+    val_df = apply_feature_scaler(val_df, scaler)
+    return df, train_df, val_df, le_task, le_resource, scaler, mode
+
+
+def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: str):
+    train_loader = DataLoader(
+        build_graph_data(train_df), batch_size=cfg.batch_size_gat, shuffle=True
+    )
+    val_loader = DataLoader(
+        build_graph_data(val_df), batch_size=cfg.batch_size_gat, shuffle=False
+    )
+    num_classes = len(le_task.classes_)
+    class_weights = compute_class_weights(train_df, num_classes).to(device)
+
+    model = NextTaskGAT(
+        input_dim=5,
+        hidden_dim=cfg.hidden_dim,
+        output_dim=num_classes,
+        num_layers=cfg.gat_layers,
+        heads=cfg.gat_heads,
+        dropout=0.5,
+    ).to(device)
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=cfg.lr_gat, weight_decay=5e-4
+    )
+    model_path = os.path.join(run_dir, "models", "best_gnn_model.pth")
+    model = train_gat_model(
+        model, train_loader, val_loader, criterion, optimizer, device,
+        num_epochs=cfg.epochs_gat, model_path=model_path,
+    )
+    y_true, y_pred, _ = evaluate_gat_model(model, val_loader, device)
+    plot_confusion_matrix(
+        y_true, y_pred, le_task.classes_,
+        os.path.join(run_dir, "visualizations", "gat_confusion_matrix.png"),
+    )
+    from sklearn.metrics import accuracy_score, matthews_corrcoef
+
+    save_metrics(
+        {
+            "accuracy": float(accuracy_score(y_true, y_pred)),
+            "mcc": float(matthews_corrcoef(y_true, y_pred)),
+        },
+        run_dir, "gat_metrics.json",
+    )
+
+
+def stage_train_lstm(df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str):
+    train_seq, val_seq = prepare_sequence_data(
+        df, train_df=train_df, val_df=val_df, seed=cfg.seed
+    )
+    X_train_pad, X_train_len, y_train, _ = make_padded_dataset(train_seq, num_classes)
+    X_val_pad, X_val_len, y_val, _ = make_padded_dataset(val_seq, num_classes)
+
+    model = NextActivityLSTM(
+        num_classes, emb_dim=cfg.hidden_dim, hidden_dim=cfg.hidden_dim, num_layers=1,
+    ).to(device)
+    model_path = os.path.join(run_dir, "models", "lstm_next_activity.pth")
+    model = train_lstm_model(
+        model, X_train_pad, X_train_len, y_train, device,
+        batch_size=cfg.batch_size_lstm, epochs=cfg.epochs_lstm, model_path=model_path,
+    )
+    preds, _ = evaluate_lstm_model(
+        model, X_val_pad, X_val_len, cfg.batch_size_lstm, device
+    )
+    from sklearn.metrics import accuracy_score
+
+    save_metrics(
+        {"accuracy": float(accuracy_score(y_val.numpy(), preds))},
+        run_dir, "lstm_metrics.json",
+    )
+
+
+def stage_analyze(df, run_dir: str):
+    bottleneck_stats, significant_bottlenecks = analyze_bottlenecks(df)
+    case_merged, long_cases, cut95 = analyze_cycle_times(df)
+    rare_trans = analyze_rare_transitions(bottleneck_stats)
+    replayed, n_deviant = perform_conformance_checking(df)
+    save_metrics(
+        {
+            "num_long_cases": int(len(long_cases)),
+            "cycle_time_95th_percentile_h": float(cut95),
+            "num_rare_transitions": int(len(rare_trans)),
+            "num_deviant_traces": int(n_deviant),
+            "total_traces": int(len(replayed)),
+        },
+        run_dir, "process_analysis.json",
+    )
+    return bottleneck_stats, significant_bottlenecks, case_merged
+
+
+def stage_viz(df, le_task, bottleneck_stats, significant_bottlenecks, case_merged, run_dir: str):
+    viz_dir = os.path.join(run_dir, "visualizations")
+    plot_cycle_time_distribution(
+        case_merged["duration_h"].values,
+        os.path.join(viz_dir, "cycle_time_distribution.png"),
+    )
+    plot_process_flow(
+        bottleneck_stats, le_task, significant_bottlenecks.head(),
+        os.path.join(viz_dir, "process_flow_bottlenecks.png"),
+    )
+    transitions, _, _ = analyze_transition_patterns(df)
+    plot_transition_heatmap(
+        transitions, le_task,
+        os.path.join(viz_dir, "transition_probability_heatmap.png"),
+    )
+    create_sankey_diagram(
+        transitions, le_task,
+        os.path.join(viz_dir, "process_flow_sankey.html"),
+    )
+
+
+def stage_cluster(df, le_task, num_classes: int, k: int, seed: int, run_dir: str):
+    adj = build_task_adjacency(df, num_classes)
+    labels = spectral_cluster_graph(adj, k=k, normalized=True, random_state=seed)
+    save_metrics(
+        {
+            "task_clusters": {
+                le_task.inverse_transform([t_id])[0]: int(lbl)
+                for t_id, lbl in enumerate(labels)
+            }
+        },
+        run_dir, "clustering_results.json",
+    )
+
+
+def stage_rl(df, le_task, episodes: int, resources, run_dir: str):
+    env = ProcessEnv(df, le_task, list(resources))
+    q_table = run_q_learning(env, episodes=episodes)
+    all_actions = [(t, r) for t in env.all_tasks for r in env.resources]
+    policy = get_optimal_policy(q_table, all_actions)
+    save_metrics(
+        {
+            "num_states": len(policy),
+            "num_actions": len(all_actions),
+            "policy": {
+                str(state): {"task": int(a[0]), "resource": int(a[1])}
+                for state, a in policy.items()
+            },
+        },
+        run_dir, "rl_results.json",
+    )
+
+
+def run_full_pipeline(data_path: str, cfg: RunConfig) -> str:
+    """End-to-end pipeline. Returns the run directory."""
+    from modules.utils import pick_device, set_seed
+
+    set_seed(cfg.seed)
+    device = pick_device(cfg.device)
+    print(f"Using device: {device}")
+
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"Dataset not found at {data_path}")
+
+    run_dir = setup_results_dir(cfg.out_dir)
+    print(f"Results will be saved in: {run_dir}")
+
+    print("\n[1/9] Preprocess")
+    df, train_df, val_df, le_task, le_resource, _, mode = stage_preprocess(
+        data_path, cfg.val_frac, cfg.seed
+    )
+    save_metrics(
+        {
+            "num_tasks": int(len(le_task.classes_)),
+            "num_resources": int(len(le_resource.classes_)),
+            "num_cases_total": int(df["case_id"].nunique()),
+            "num_cases_train": int(train_df["case_id"].nunique()),
+            "num_cases_val": int(val_df["case_id"].nunique()),
+            "scaler_mode": mode,
+            "date_range": [str(df["timestamp"].min()), str(df["timestamp"].max())],
+            "seed": cfg.seed,
+        },
+        run_dir, "preprocessing_info.json",
+    )
+    num_classes = len(le_task.classes_)
+
+    if not cfg.skip_gat:
+        print("\n[2/9] Train + eval GAT")
+        stage_train_gat(train_df, val_df, le_task, cfg, device, run_dir)
+    else:
+        print("\n[2/9] Train + eval GAT — skipped")
+
+    if not cfg.skip_lstm:
+        print("\n[3/9] Train LSTM")
+        stage_train_lstm(df, train_df, val_df, num_classes, cfg, device, run_dir)
+    else:
+        print("\n[3/9] Train LSTM — skipped")
+
+    bottleneck_stats = significant_bottlenecks = case_merged = None
+    if not cfg.skip_analyze:
+        print("\n[4/9] Process-mining analysis")
+        bottleneck_stats, significant_bottlenecks, case_merged = stage_analyze(df, run_dir)
+    else:
+        print("\n[4/9] Process-mining analysis — skipped")
+
+    if not cfg.skip_viz:
+        if bottleneck_stats is None:
+            print("\n[5/9] Visualizations — skipped (analyze did not run)")
+        else:
+            print("\n[5/9] Visualizations")
+            stage_viz(df, le_task, bottleneck_stats, significant_bottlenecks, case_merged, run_dir)
+    else:
+        print("\n[5/9] Visualizations — skipped")
+
+    if not cfg.skip_cluster:
+        print("\n[6/9] Spectral clustering")
+        stage_cluster(df, le_task, num_classes, cfg.clusters, cfg.seed, run_dir)
+    else:
+        print("\n[6/9] Spectral clustering — skipped")
+
+    if not cfg.skip_rl:
+        print("\n[7/9] Tabular RL")
+        stage_rl(df, le_task, cfg.rl_episodes, cfg.rl_resources, run_dir)
+    else:
+        print("\n[7/9] Tabular RL — skipped")
+
+    print(f"\nDone. Results saved in {run_dir}")
+    return run_dir
