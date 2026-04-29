@@ -70,6 +70,13 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
         default=0.5,
         help="Weight on the time-prediction MSE term when --predict-time is set.",
     )
+    p.add_argument(
+        "--no-calibrate",
+        action="store_true",
+        help="Skip post-hoc temperature scaling on the GAT classifier. "
+             "Default fits one scalar T on the val NLL so reported "
+             "probabilities are calibrated; ECE before/after is recorded.",
+    )
 
     p.add_argument("--skip-gat", action="store_true")
     p.add_argument("--skip-lstm", action="store_true")
@@ -102,6 +109,7 @@ def _cfg_from_args(args: argparse.Namespace):
         gat_causal=not args.gat_bidirectional,
         gat_predict_time=args.predict_time,
         time_loss_weight=args.time_loss_weight,
+        calibrate=not args.no_calibrate,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,

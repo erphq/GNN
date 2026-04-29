@@ -17,7 +17,13 @@ from typing import Optional, Tuple
 import torch
 from torch_geometric.loader import DataLoader
 
-from models.gat_model import NextTaskGAT, evaluate_gat_model, train_gat_model
+from models.gat_model import (
+    NextTaskGAT,
+    evaluate_gat_model,
+    expected_calibration_error,
+    fit_temperature,
+    train_gat_model,
+)
 from models.lstm_model import (
     NextActivityLSTM,
     evaluate_lstm_model,
@@ -76,6 +82,7 @@ class RunConfig:
     gat_causal: bool = True
     gat_predict_time: bool = False
     time_loss_weight: float = 0.5
+    calibrate: bool = True
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -147,7 +154,8 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
         num_epochs=cfg.epochs_gat, model_path=model_path,
         time_loss_weight=cfg.time_loss_weight,
     )
-    y_true, y_pred, _ = evaluate_gat_model(model, val_loader, device)
+    # Uncalibrated pass — for accuracy / MCC and the pre-cal ECE baseline.
+    y_true, y_pred, y_prob = evaluate_gat_model(model, val_loader, device)
     plot_confusion_matrix(
         y_true, y_pred, le_task.classes_,
         os.path.join(run_dir, "visualizations", "gat_confusion_matrix.png"),
@@ -159,9 +167,26 @@ def stage_train_gat(train_df, val_df, le_task, cfg: RunConfig, device, run_dir: 
         "mcc": float(matthews_corrcoef(y_true, y_pred)),
     }
     if cfg.gat_predict_time:
-        # populated by evaluate_gat_model when the time head is active.
         metrics["dt_mae_hours"] = float(getattr(model, "last_dt_mae_hours", float("nan")))
         metrics["time_loss_weight"] = float(cfg.time_loss_weight)
+
+    if cfg.calibrate:
+        ece_before = expected_calibration_error(y_true, y_prob)
+        T = fit_temperature(model, val_loader, device)
+        # Re-evaluate with the calibrated temperature so reported probs
+        # are honest. Accuracy / MCC are unchanged (T does not change
+        # argmax) but ECE typically drops sharply.
+        _, _, y_prob_cal = evaluate_gat_model(model, val_loader, device, temperature=T)
+        ece_after = expected_calibration_error(y_true, y_prob_cal)
+        metrics["temperature"] = float(T)
+        metrics["ece_before_calibration"] = float(ece_before)
+        metrics["ece_after_calibration"] = float(ece_after)
+        # Persist T alongside the model so inference can reload both.
+        torch.save(
+            {"temperature": float(T)},
+            os.path.join(run_dir, "models", "gat_calibration.pt"),
+        )
+
     save_metrics(metrics, run_dir, "gat_metrics.json")
 
 

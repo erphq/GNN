@@ -13,7 +13,11 @@ from modules.data_preprocessing import (
     fit_feature_scaler,
     split_cases,
 )
-from models.gat_model import NextTaskGAT, compute_graph_label
+from models.gat_model import (
+    NextTaskGAT,
+    compute_graph_label,
+    expected_calibration_error,
+)
 from models.lstm_model import (
     NextActivityLSTM,
     make_padded_dataset,
@@ -164,3 +168,24 @@ def test_prefixes_are_case_isolated(synthetic_event_log):
         max(0, len(g) - 1) for _, g in train.groupby("case_id")
     )
     assert len(train_seq) == train_expected
+
+
+def test_ece_zero_when_perfectly_calibrated():
+    """If confidence == accuracy, ECE = 0. Use a one-hot prob matrix that's
+    correct everywhere — confidence is 1.0, accuracy is 1.0, ECE = 0."""
+    n, k = 20, 4
+    y_true = torch.arange(n) % k
+    y_prob = torch.zeros(n, k)
+    y_prob[torch.arange(n), y_true] = 1.0
+    assert expected_calibration_error(y_true, y_prob) == 0.0
+
+
+def test_ece_high_when_uniformly_overconfident():
+    """All predictions wrong but at probability 1 → ECE = 1 (max)."""
+    n, k = 20, 4
+    y_true = torch.zeros(n, dtype=torch.long)
+    # Always predict class 1 with probability 1, but truth is class 0.
+    y_prob = torch.zeros(n, k)
+    y_prob[:, 1] = 1.0
+    ece = expected_calibration_error(y_true, y_prob)
+    assert ece > 0.99

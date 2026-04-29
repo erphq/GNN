@@ -181,6 +181,76 @@ def _select_labels(batch_data, node_level: bool):
     return compute_graph_label(batch_data.y, batch_data.batch)
 
 
+def fit_temperature(model, val_loader, device, lr: float = 0.01, max_iter: int = 50) -> float:
+    """Calibrate the classifier with a single positive temperature scalar.
+
+    Standard temperature scaling (Guo et al. 2017): freeze the model,
+    collect val logits, and fit ``T > 0`` minimizing NLL of
+    ``softmax(logits / T)`` against val labels. ``T > 1`` means the
+    model was overconfident; ``T < 1`` means underconfident. The model
+    itself is unchanged — apply T at inference, or pass it to
+    ``evaluate_gat_model``.
+
+    Reparametrized as ``T = exp(log_T)`` so LBFGS doesn't need a
+    positivity constraint.
+    """
+    model.eval()
+    all_logits, all_labels = [], []
+    predict_time = getattr(model, "predict_time", False)
+    node_level = getattr(model, "node_level", False)
+
+    with torch.no_grad():
+        for batch_data in val_loader:
+            out = model(
+                batch_data.x.to(device),
+                batch_data.edge_index.to(device),
+                batch_data.batch.to(device),
+            )
+            logits = out[0] if predict_time else out
+            all_logits.append(logits.cpu())
+            all_labels.append(_select_labels(batch_data, node_level).cpu().long())
+
+    if not all_logits:
+        return 1.0
+
+    logits = torch.cat(all_logits)
+    labels = torch.cat(all_labels)
+
+    log_T = torch.zeros(1, requires_grad=True)
+    optimizer = torch.optim.LBFGS([log_T], lr=lr, max_iter=max_iter)
+
+    def closure():
+        optimizer.zero_grad()
+        T = log_T.exp()
+        loss = torch.nn.functional.cross_entropy(logits / T, labels)
+        loss.backward()
+        return loss
+
+    optimizer.step(closure)
+    return float(log_T.exp().item())
+
+
+def expected_calibration_error(y_true, y_prob, n_bins: int = 15) -> float:
+    """ECE: weighted average of |bin_confidence - bin_accuracy| across
+    equal-width confidence bins. 0 = perfectly calibrated.
+    """
+    if y_prob.ndim != 2 or y_prob.shape[0] == 0:
+        return 0.0
+    confidences = y_prob.max(dim=1).values
+    predictions = y_prob.argmax(dim=1)
+    accuracies = (predictions == y_true).float()
+    ece = torch.tensor(0.0)
+    boundaries = torch.linspace(0, 1, n_bins + 1)
+    for i in range(n_bins):
+        lo, hi = boundaries[i], boundaries[i + 1]
+        in_bin = (confidences > lo) & (confidences <= hi)
+        if in_bin.any():
+            ece += in_bin.float().mean() * (
+                accuracies[in_bin].mean() - confidences[in_bin].mean()
+            ).abs()
+    return float(ece.item())
+
+
 def compute_graph_label(y, batch):
     """Modal next_task across all events of each case → graph-level label.
 
@@ -196,12 +266,16 @@ def compute_graph_label(y, batch):
     return torch.stack(labels_out)
 
 
-def evaluate_gat_model(model, val_loader, device):
+def evaluate_gat_model(model, val_loader, device, temperature: float = 1.0):
     """Run the model over the val set and return (y_true, y_pred, y_prob).
 
     Shape is per-node when ``model.node_level`` is True, per-graph
     otherwise. Downstream consumers (confusion matrix, accuracy, MCC)
     only see flat tensors so the same plumbing works for both heads.
+
+    ``temperature`` divides logits before softmax. Pass the value
+    returned by ``fit_temperature`` to get calibrated probabilities;
+    leave at 1.0 for raw model output.
 
     Side effect: when the model has a time-prediction head, populates
     ``model.last_dt_mae_hours`` with the mean absolute error in hours
@@ -227,7 +301,7 @@ def evaluate_gat_model(model, val_loader, device):
                 dt_true_all.append(batch_data.dt.cpu().numpy())
             else:
                 logits = out
-            probs = torch.softmax(logits, dim=1).cpu().numpy()
+            probs = torch.softmax(logits / temperature, dim=1).cpu().numpy()
             labels = _select_labels(batch_data, node_level)
 
             preds = torch.argmax(logits, dim=1).cpu().tolist()
