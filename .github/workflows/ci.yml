@@ -48,8 +48,10 @@ jobs:
             matplotlib \
             seaborn \
             plotly \
+            pm4py \
             pytest \
             maturin
+          pip install -e .
       - name: build pm_fast (Rust hot-path extension)
         # `maturin develop` insists on a virtualenv; CI has none, so build
         # a wheel and pip-install it instead. Tests pick it up via

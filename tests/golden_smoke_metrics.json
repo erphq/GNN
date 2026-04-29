@@ -1,0 +1,139 @@
+{
+  "rl_results.json": {
+    "num_states": 5,
+    "num_actions": 10
+  },
+  "preprocessing_info.json": {
+    "num_tasks": 6,
+    "num_resources": 5,
+    "num_cases_total": 50,
+    "num_cases_train": 40,
+    "num_cases_val": 10,
+    "scaler_mode": "norm",
+    "seed": 42
+  },
+  "baseline_metrics.json": {
+    "most_common_label": 4,
+    "most_common_accuracy": 0.24489795918367346,
+    "markov_accuracy": 0.8979591836734694,
+    "markov_coverage": 1.0,
+    "num_val_events": 49
+  },
+  "clustering_results.json": {
+    "task_clusters": {
+      "Approve": 0,
+      "Archive": 2,
+      "Notify": 0,
+      "Process": 0,
+      "Review": 1,
+      "Submit": 1
+    }
+  },
+  "process_analysis.json": {
+    "num_long_cases": 3,
+    "cycle_time_95th_percentile_h": 11.969166666666665,
+    "num_rare_transitions": 1,
+    "num_deviant_traces": 0,
+    "total_traces": 50,
+    "conformance_fitness": 1.0,
+    "conformance_precision": 0.8516949152542372,
+    "conformance_f_score": 0.9199084668192219
+  },
+  "gat_metrics.json": {
+    "accuracy": 0.1836734693877551,
+    "mcc": 0.0,
+    "per_class": {
+      "Approve": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 9
+      },
+      "Archive": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 10
+      },
+      "Notify": {
+        "precision": 0.1836734693877551,
+        "recall": 1.0,
+        "f1": 0.3103448275862069,
+        "support": 9
+      },
+      "Process": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 9
+      },
+      "Review": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 12
+      },
+      "Submit": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 0
+      }
+    },
+    "macro_f1": 0.05172413793103448,
+    "weighted_f1": 0.05700211118930331,
+    "lift_over_markov": -0.7142857142857143,
+    "lift_over_most_common": -0.06122448979591835,
+    "temperature": 0.9797777533531189,
+    "ece_before_calibration": 0.007313966751098633,
+    "ece_after_calibration": 0.007818147540092468
+  },
+  "lstm_metrics.json": {
+    "accuracy": 0.6410256410256411,
+    "per_class": {
+      "Approve": {
+        "precision": 0.75,
+        "recall": 1.0,
+        "f1": 0.8571428571428571,
+        "support": 9
+      },
+      "Archive": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 0
+      },
+      "Notify": {
+        "precision": 0.4444444444444444,
+        "recall": 0.8888888888888888,
+        "f1": 0.5925925925925926,
+        "support": 9
+      },
+      "Process": {
+        "precision": 0.8888888888888888,
+        "recall": 0.8888888888888888,
+        "f1": 0.8888888888888888,
+        "support": 9
+      },
+      "Review": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 12
+      },
+      "Submit": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 0
+      }
+    },
+    "macro_f1": 0.3897707231040564,
+    "weighted_f1": 0.5396825396825397,
+    "lift_over_markov": -0.2569335426478283,
+    "lift_over_most_common": 0.3961276818419676,
+    "temperature": 0.90257328748703,
+    "ece_before_calibration": 0.5105024576187134,
+    "ece_after_calibration": 0.504472553730011
+  }
+}
