@@ -157,6 +157,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_cl.add_argument("--out-dir", default="results")
     p_cl.add_argument("--seed", type=int, default=42)
 
+    p_ex = sub.add_parser(
+        "explain",
+        help="Run the trained GAT on a single case and dump per-event "
+             "attention weights + a heatmap PNG. Pass --model to use a "
+             "previously-trained model; otherwise a quick demo GAT is "
+             "trained on the fly.",
+    )
+    p_ex.add_argument("data_path")
+    p_ex.add_argument("--case-id", required=True, help="Case ID to explain.")
+    p_ex.add_argument("--model", default=None,
+                      help="Path to a previously-trained best_gnn_model.pth.")
+    p_ex.add_argument("--out-dir", default="results")
+    p_ex.add_argument("--seed", type=int, default=42)
+    p_ex.add_argument("--epochs-gat", type=int, default=2,
+                      help="Used only when --model is not supplied.")
+    p_ex.add_argument("--hidden-dim", type=int, default=64)
+    p_ex.add_argument("--gat-heads", type=int, default=4)
+    p_ex.add_argument("--gat-layers", type=int, default=2)
+    p_ex.add_argument("--device", default=None)
+
     p_bl = sub.add_parser(
         "baseline",
         help="Score null + Markov baselines on a CSV. The scientific floor "
@@ -223,6 +243,51 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     )
     stage_analyze(df, run_dir)
     print(f"Done. Analysis saved in {run_dir}")
+    return EXIT_OK
+
+
+def cmd_explain(args: argparse.Namespace) -> int:
+    from gnn_cli.explain import explain_case, load_or_train_gat
+    from gnn_cli.stages import RunConfig, setup_results_dir, stage_preprocess
+    from modules.utils import pick_device, set_seed
+
+    if not os.path.exists(args.data_path):
+        print(f"error: dataset not found at {args.data_path}", file=sys.stderr)
+        return EXIT_DATA
+
+    set_seed(args.seed)
+    device = pick_device(args.device)
+
+    run_dir = setup_results_dir(args.out_dir)
+    print(f"Results will be saved in: {run_dir}")
+    df, train_df, val_df, le_task, _, _, _ = stage_preprocess(
+        args.data_path, val_frac=0.2, seed=args.seed
+    )
+
+    cfg = RunConfig(
+        epochs_gat=args.epochs_gat,
+        hidden_dim=args.hidden_dim,
+        gat_heads=args.gat_heads,
+        gat_layers=args.gat_layers,
+    )
+    model = load_or_train_gat(
+        train_df, val_df, le_task, device, args.model, cfg
+    )
+    # explain_case calls build_graph_data which needs the feat_* columns.
+    # train_df and val_df both have them (from stage_preprocess); concat
+    # gives a scaled full df without re-fitting the scaler.
+    import pandas as pd
+
+    scaled_df = pd.concat([train_df, val_df], ignore_index=True)
+    summary = explain_case(
+        scaled_df, args.case_id, model, le_task,
+        os.path.join(run_dir, "explanations"), device,
+    )
+    print(
+        f"Explained case {summary['case_id']} "
+        f"({summary['num_events']} events). "
+        f"Output: {run_dir}/explanations/explain_{args.case_id}.json + .png"
+    )
     return EXIT_OK
 
 
@@ -323,6 +388,7 @@ COMMANDS = {
     "analyze": cmd_analyze,
     "cluster": cmd_cluster,
     "baseline": cmd_baseline,
+    "explain": cmd_explain,
     "smoke": cmd_smoke,
     "version": cmd_version,
 }

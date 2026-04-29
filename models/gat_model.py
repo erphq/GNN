@@ -84,6 +84,28 @@ class NextTaskGAT(nn.Module):
             return logits, dt_pred
         return logits
 
+    def forward_with_attention(self, x, edge_index, batch):
+        """Forward pass that also returns per-layer attention weights.
+
+        Used by ``gnn explain`` for interpretability — surfaces which
+        past events most influenced each predicted next-task. Each
+        attention entry is ``(edge_index, alpha)`` from the
+        corresponding GATConv layer; alpha shape is
+        ``(num_edges, heads)`` (concat=True).
+        """
+        attentions = []
+        for conv in self.convs:
+            x, (ei, alpha) = conv(x, edge_index, return_attention_weights=True)
+            attentions.append((ei.detach().cpu(), alpha.detach().cpu()))
+            x = torch.nn.functional.elu(x)
+            x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
+        if not self.node_level:
+            x = global_mean_pool(x, batch)
+        logits = self.fc(x)
+        if self.predict_time:
+            return logits, self.dt_head(x).squeeze(-1), attentions
+        return logits, attentions
+
 
 def train_gat_model(
     model,
