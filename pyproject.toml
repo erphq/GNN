@@ -28,6 +28,7 @@ gnn = "gnn_cli.cli:main"
 [project.optional-dependencies]
 dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.10", "hypothesis>=6"]
 serve = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2"]
+export = ["onnx>=1.17", "onnxruntime>=1.20"]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

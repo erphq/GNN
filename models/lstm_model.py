@@ -125,6 +125,56 @@ class NextActivityLSTM(nn.Module):
             return logits, dt_raw.squeeze(-1)
         return logits
 
+    def inference_forward(
+        self, x, seq_len,
+        x_resources: torch.Tensor | None = None,
+        x_continuous: torch.Tensor | None = None,
+    ):
+        """ONNX-exportable forward — same outputs as ``forward`` but
+        without ``pack_padded_sequence``.
+
+        The training path packs the batch by descending length so the
+        LSTM only does work on real (non-pad) tokens. ONNX's exporter
+        struggles with the dynamic shapes that produces, so for
+        inference we run the LSTM over the full padded sequence and
+        gather the last *real* hidden state via ``seq_len - 1``.
+
+        Equivalent up to floating-point noise (the LSTM still returns
+        the same hidden at the same position; padding tokens just get
+        processed but their output is ignored). The export round-trip
+        test enforces ``max(|torch - onnx|) < 1e-4``.
+        """
+        x_emb = self.emb(x)
+        if self.use_resource:
+            if x_resources is None:
+                raise ValueError(
+                    "model has resource embedding but x_resources is None"
+                )
+            x_emb = torch.cat([x_emb, self.resource_emb(x_resources)], dim=-1)
+        if self.n_continuous_dims > 0:
+            if x_continuous is None:
+                raise ValueError(
+                    f"model expects {self.n_continuous_dims} continuous dims "
+                    f"but x_continuous is None"
+                )
+            x_emb = torch.cat([x_emb, x_continuous], dim=-1)
+        # Full-sequence LSTM; output_seq is (B, T, H), final state is (1, B, H).
+        output_seq, _ = self.lstm(x_emb)
+        # Gather the hidden state at position seq_len-1 per row. clamp
+        # protects against an empty input row (seq_len=0) which would
+        # otherwise index -1 → last padded position; pipeline guarantees
+        # seq_len >= 1, but defensive.
+        last_idx = (seq_len - 1).clamp(min=0).long()
+        bsz = output_seq.shape[0]
+        last_hidden = output_seq[torch.arange(bsz, device=output_seq.device), last_idx]
+        logits = self.fc(last_hidden)
+        if self.predict_time:
+            dt_raw = self.dt_head(last_hidden)
+            if self.time_quantiles is not None:
+                return logits, dt_raw
+            return logits, dt_raw.squeeze(-1)
+        return logits
+
 
 def _build_prefixes(df, *, continuous_features: list[str] | None = None):
     """Yield 5-tuples

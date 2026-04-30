@@ -265,6 +265,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_wi.add_argument("--out-dir", default="results")
     p_wi.add_argument("--seed", type=int, default=42)
 
+    p_ex2 = sub.add_parser(
+        "export",
+        help="Serialize a trained model to a portable inference format. "
+             "Today: ONNX. Bridge to inference outside Python (Rust, "
+             "Java, browser, ONNX Runtime).",
+    )
+    p_ex2.add_argument(
+        "format",
+        choices=("onnx",),
+        help="Output format. Currently `onnx` is the only target.",
+    )
+    p_ex2.add_argument("run_dir", help="Path to a results/run_<timestamp>/ dir.")
+    p_ex2.add_argument(
+        "--out", default=None,
+        help="Output path. Defaults to <run_dir>/models/<arch>.onnx.",
+    )
+    p_ex2.add_argument("--opset", type=int, default=17)
+    p_ex2.add_argument("--device", default="cpu",
+                       help="Trace device (cpu / cuda / mps).")
+
     p_sv = sub.add_parser(
         "serve",
         help="Start a FastAPI inference endpoint backed by a trained "
@@ -503,6 +523,38 @@ def cmd_whatif(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    from gnn_cli.export import export_to_onnx
+    from pathlib import Path as _P
+
+    run_dir = _P(args.run_dir)
+    if not run_dir.exists():
+        print(f"error: run dir not found: {run_dir}", file=sys.stderr)
+        return EXIT_DATA
+
+    if args.out is None:
+        # Default location: alongside the .pth file.
+        models_dir = run_dir / "models"
+        out_path = (
+            models_dir / "transformer.onnx"
+            if (models_dir / "transformer_arch.json").exists()
+            else models_dir / "lstm.onnx"
+        )
+    else:
+        out_path = _P(args.out)
+
+    try:
+        written = export_to_onnx(
+            run_dir, out_path, opset=args.opset, device=args.device,
+        )
+    except FileNotFoundError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_DATA
+    print(f"Exported {written}")
+    print(f"Sidecar  {written.with_suffix(written.suffix + '.meta.json')}")
+    return EXIT_OK
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     try:
         from gnn_cli.serve import serve
@@ -689,6 +741,7 @@ COMMANDS = {
     "explain": cmd_explain,
     "predict-suffix": cmd_predict_suffix,
     "whatif": cmd_whatif,
+    "export": cmd_export,
     "serve": cmd_serve,
     "diff": cmd_diff,
     "smoke": cmd_smoke,

@@ -362,6 +362,32 @@ def stage_train_lstm(
         time_loss_weight=cfg.time_loss_weight,
     )
 
+    # Save architecture metadata alongside the .pth so downstream
+    # consumers (gnn export, gnn predict-suffix, gnn serve) can
+    # reconstruct the class without the user re-supplying every flag.
+    arch_meta = {
+        "seq_arch": cfg.seq_arch,
+        "num_classes": int(num_classes),
+        "emb_dim": int(cfg.hidden_dim),
+        "hidden_dim": int(cfg.hidden_dim),
+        "num_layers": (
+            int(cfg.transformer_layers) if cfg.seq_arch == "transformer" else 1
+        ),
+        "predict_time": bool(cfg.gat_predict_time),
+        "num_resources": (int(num_resources) if num_resources else None),
+        "n_continuous_dims": int(len(cont_cols)),
+        "continuous_features": list(cont_cols),
+        "time_quantiles": list(cfg.time_quantiles),
+        "transformer_heads": int(cfg.transformer_heads),
+        "max_seq_len": int(X_train_pad.shape[1]),
+    }
+    arch_path = os.path.join(
+        run_dir, "models",
+        f"{'transformer' if cfg.seq_arch == 'transformer' else 'lstm'}_arch.json",
+    )
+    with open(arch_path, "w") as f:
+        json.dump(arch_meta, f, indent=2)
+
     # Uncalibrated pass — accuracy + pre-cal ECE.
     preds, probs = evaluate_lstm_model(
         model, X_val_pad, X_val_len, cfg.batch_size_lstm, device,
