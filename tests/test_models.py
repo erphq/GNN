@@ -276,3 +276,45 @@ def test_mrr_perfect_and_random():
     worst = torch.ones(n, k)
     worst[torch.arange(n), y_true] = 0.0
     assert abs(mean_reciprocal_rank(y_true, worst) - 0.2) < 1e-6
+
+
+def test_transformer_forward_shape(synthetic_event_log):
+    """Transformer returns logits of shape (batch, num_cls)."""
+    from models.transformer_model import NextActivityTransformer
+
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    train_seq, _ = prepare_sequence_data(df, val_frac=0.2, seed=0)
+    Xp, Xl, y, _ = make_padded_dataset(train_seq, num_cls=len(le_task.classes_))
+    model = NextActivityTransformer(
+        num_cls=len(le_task.classes_),
+        emb_dim=8, hidden_dim=8, num_layers=1, num_heads=2,
+        max_len=int(Xp.shape[1]) + 4,
+    )
+    out = model(Xp[:4], Xl[:4])
+    assert out.shape == (4, len(le_task.classes_))
+
+
+def test_transformer_predict_time_returns_tuple(synthetic_event_log):
+    """With predict_time=True, forward returns (logits, dt_pred)."""
+    from models.transformer_model import NextActivityTransformer
+
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    train_seq, _ = prepare_sequence_data(df, val_frac=0.2, seed=0)
+    Xp, Xl, y, _ = make_padded_dataset(train_seq, num_cls=len(le_task.classes_))
+    model = NextActivityTransformer(
+        num_cls=len(le_task.classes_),
+        emb_dim=8, hidden_dim=8, num_layers=1, num_heads=2,
+        predict_time=True, max_len=int(Xp.shape[1]) + 4,
+    )
+    out = model(Xp[:4], Xl[:4])
+    assert isinstance(out, tuple) and len(out) == 2
+    logits, dt_pred = out
+    assert dt_pred.shape == (4,)
+
+
+def test_transformer_emb_dim_must_divide_heads():
+    """Constructor rejects emb_dim not divisible by num_heads."""
+    from models.transformer_model import NextActivityTransformer
+
+    with pytest.raises(ValueError, match="divisible"):
+        NextActivityTransformer(num_cls=4, emb_dim=10, num_heads=4)

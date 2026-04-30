@@ -93,6 +93,18 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
              "val_frac of cases as val — closer to production deployment, "
              "and surfaces drift that random splits hide.",
     )
+    p.add_argument(
+        "--seq-arch",
+        choices=("lstm", "transformer"),
+        default="lstm",
+        help="Sequence-model architecture for the next-activity head. "
+             "'lstm' (default) is the production-tuned baseline. "
+             "'transformer' is a small causal transformer (4 layers x 4 "
+             "heads) that competes with the LSTM head-to-head on long "
+             "logs; uses the same calibration and time-head plumbing.",
+    )
+    p.add_argument("--transformer-layers", type=int, default=4)
+    p.add_argument("--transformer-heads", type=int, default=4)
 
     p.add_argument("--skip-gat", action="store_true")
     p.add_argument("--skip-lstm", action="store_true")
@@ -127,6 +139,9 @@ def _cfg_from_args(args: argparse.Namespace):
         time_loss_weight=args.time_loss_weight,
         calibrate=not args.no_calibrate,
         split_mode=args.split_mode,
+        seq_arch=args.seq_arch,
+        transformer_layers=args.transformer_layers,
+        transformer_heads=args.transformer_heads,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,

@@ -34,6 +34,7 @@ from models.lstm_model import (
     prepare_sequence_data,
     train_lstm_model,
 )
+from models.transformer_model import NextActivityTransformer
 from modules.data_preprocessing import (
     apply_feature_scaler,
     build_graph_data,
@@ -87,6 +88,9 @@ class RunConfig:
     time_loss_weight: float = 0.5
     calibrate: bool = True
     split_mode: str = "case"
+    seq_arch: str = "lstm"  # "lstm" | "transformer"
+    transformer_layers: int = 4
+    transformer_heads: int = 4
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -252,11 +256,26 @@ def stage_train_lstm(
             dt_train = getattr(X_train_pad, "dt_targets", None)
             dt_val = getattr(X_val_pad, "dt_targets", None)
 
-    model = NextActivityLSTM(
-        num_classes, emb_dim=cfg.hidden_dim, hidden_dim=cfg.hidden_dim, num_layers=1,
-        predict_time=cfg.gat_predict_time,
-    ).to(device)
-    model_path = os.path.join(run_dir, "models", "lstm_next_activity.pth")
+    if cfg.seq_arch == "transformer":
+        model = NextActivityTransformer(
+            num_classes,
+            emb_dim=cfg.hidden_dim,
+            hidden_dim=cfg.hidden_dim,
+            num_layers=cfg.transformer_layers,
+            num_heads=cfg.transformer_heads,
+            predict_time=cfg.gat_predict_time,
+            # Pad to the longest possible prefix in this run.
+            max_len=int(X_train_pad.shape[1]) + 8,
+        ).to(device)
+    else:
+        model = NextActivityLSTM(
+            num_classes, emb_dim=cfg.hidden_dim, hidden_dim=cfg.hidden_dim, num_layers=1,
+            predict_time=cfg.gat_predict_time,
+        ).to(device)
+    model_path = os.path.join(
+        run_dir, "models",
+        f"{'transformer' if cfg.seq_arch == 'transformer' else 'lstm'}_next_activity.pth",
+    )
     model = train_lstm_model(
         model, X_train_pad, X_train_len, y_train, device,
         batch_size=cfg.batch_size_lstm, epochs=cfg.epochs_lstm,
@@ -279,6 +298,7 @@ def stage_train_lstm(
     y_true_t = _torch.from_numpy(y_true_lstm).long()
     y_prob_t = _torch.from_numpy(probs)
     lstm_metrics = {
+        "model_arch": cfg.seq_arch,
         "accuracy": float(accuracy_score(y_true_lstm, preds)),
         "top_3_accuracy": top_k_accuracy(y_true_t, y_prob_t, 3),
         "top_5_accuracy": top_k_accuracy(y_true_t, y_prob_t, 5),
