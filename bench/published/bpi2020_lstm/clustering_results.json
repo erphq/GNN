@@ -1,0 +1,21 @@
+{
+    "task_clusters": {
+        "Declaration APPROVED by ADMINISTRATION": 1,
+        "Declaration APPROVED by BUDGET OWNER": 1,
+        "Declaration APPROVED by PRE_APPROVER": 1,
+        "Declaration FINAL_APPROVED by SUPERVISOR": 0,
+        "Declaration FOR_APPROVAL by ADMINISTRATION": 1,
+        "Declaration FOR_APPROVAL by PRE_APPROVER": 1,
+        "Declaration FOR_APPROVAL by SUPERVISOR": 1,
+        "Declaration REJECTED by ADMINISTRATION": 2,
+        "Declaration REJECTED by BUDGET OWNER": 1,
+        "Declaration REJECTED by EMPLOYEE": 2,
+        "Declaration REJECTED by MISSING": 1,
+        "Declaration REJECTED by PRE_APPROVER": 1,
+        "Declaration REJECTED by SUPERVISOR": 1,
+        "Declaration SAVED by EMPLOYEE": 1,
+        "Declaration SUBMITTED by EMPLOYEE": 1,
+        "Payment Handled": 1,
+        "Request Payment": 0
+    }
+}

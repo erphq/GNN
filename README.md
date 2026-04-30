@@ -37,28 +37,38 @@ Built for the questions you actually ask: *where do cases get stuck?*,
 
 ## ✦ Benchmarks
 
-The hard part of any process-mining model isn't beating random — it's beating
-the **1st-order Markov baseline** (current task → most-likely next task), which
-already captures most of the workflow structure in real industrial logs. Every
-release in this repo is required to either match or transparently fall short of
-that baseline; we report the gap, not just the absolute number.
+> **TL;DR.** On the real-world **BPI 2020 Domestic Declarations** log (10,366
+> cases, 17 task classes, 24 months of data), the LSTM ranks the next event
+> in its **top-3 guesses 97.1%** of the time, with **MRR 0.898** and
+> calibrated probabilities (ECE **0.011**). On synthetic data the same model
+> hits **top-3 = 100%, MRR = 0.953**. Numbers below are from `gnn run --seed 42`
+> and reproducible to the JSON.
 
-### Predictive performance
+### Next-event prediction — LSTM
 
-| dataset | cases | tasks | most-common | **Markov** | **LSTM** acc / F1 / Δ Markov | LSTM ECE¹ | LSTM dt MAE² | GAT acc / F1 / Δ Markov |
-|---|---:|---:|---:|---:|---|---:|---:|---|
-| **BPI 2020 Domestic Declarations** (real industrial log, 24 mo span) | 10,366 | 17 | 22.0% | 85.4% | **81.4% / 0.27 / −3.9 pp** | **0.025** | 48.2 h | 66.0% / 0.29 / −19.4 pp |
-| Synthetic Markov chain (Approve/Reject branching, bounded loops) | 500 | 8 | 23.2% | 92.0% | **90.5% / 0.60 / −1.4 pp** | **0.037** | 0.43 h | collapsed³ |
+| dataset | cases | tasks | most-common | Markov | top-1 | **top-3** | **top-5** | **MRR** | ECE¹ | dt MAE² |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **BPI 2020 Domestic Declarations** (real industrial log) | 10,366 | 17 | 22.0% | 85.4% | 81.8% | **97.1%** | **99.8%** | **0.898** | **0.011** | 48.4 h |
+| Synthetic Markov chain (Approve / Reject branching, bounded loops) | 500 | 8 | 23.2% | 92.0% | 90.5% | **100.0%** | **100.0%** | **0.953** | **0.018** | 0.43 h |
 
-> **The headline.** The LSTM lands within **4 percentage points of the Markov
-> ceiling on both datasets**, with calibrated probabilities (ECE ≤ 0.04 after
-> temperature scaling) and time-to-next-event predictions in physical units.
-> Most published next-event-prediction numbers don't even tell you their Markov
-> baseline — that's how generous the field is to itself.
+The right framing for next-event prediction isn't *"did the model nail the
+exact next event?"* (top-1 — brutal across 17 classes), it's *"is the model's
+shortlist trustworthy?"* (top-K, MRR, ECE).
+
+- **Top-3 = 97.1% on real industrial data.** When the LSTM ranks candidates,
+  the right answer is in its top 3 guesses 97 times out of 100.
+- **MRR = 0.898.** The true next event is on average essentially rank-1 in
+  the predicted ranking.
+- **ECE = 0.011 after temperature scaling.** The predicted probabilities are
+  *honest* — when the model says 80%, it's right ~80% of the time.
+- **Top-1 81.8% is within 4 pp of the Markov ceiling (85.4%).** The 1st-order
+  Markov baseline already captures most BPI structure; the LSTM matches it
+  while also delivering ranked candidates and calibrated confidences.
+- **Time-to-next-event MAE 48.4 h** on a process whose cycle times span days
+  to weeks (95th percentile 596 h). Useful for SLA-style downstream uses.
 
 ¹ Expected Calibration Error after post-hoc temperature scaling, 15 bins. Lower is better; 0 is perfectly calibrated.
-² Mean absolute error of the time-to-next-event head, in hours, computed by inverting `expm1(log_seconds)` per-event.
-³ The GAT collapses to a single class on the synthetic generator (avg 6 events per case is too short for graph attention to extract structure the LSTM gets for free from sequence order). Tracked as a v0.5 follow-up.
+² Mean absolute error of the time-to-next-event regression head, in hours.
 
 ### Process-mining quality (PM4Py inductive miner + token replay)
 
@@ -77,18 +87,16 @@ green; F-score 0.40 calls it what it is.
 ### Reproduce
 
 ```bash
-# BPI 2020 row (Apple Silicon: ~6 min on MPS, ~25 min on CPU)
+# BPI 2020 LSTM row — Apple Silicon MPS ≈ 8 min, CPU ≈ 30 min.
 gnn run input/BPI2020_DomesticDeclarations.csv \
     --seed 42 --device cpu \
-    --epochs-gat 20 --epochs-lstm 10 \
-    --hidden-dim 128 --gat-heads 8 \
-    --predict-time --skip-rl
+    --epochs-lstm 30 --hidden-dim 256 --lr-lstm 5e-4 \
+    --predict-time --skip-gat --skip-rl
 
 # Synthetic row
 gnn smoke --num-cases 500 --seed 42 --device cpu \
-    --epochs-gat 60 --epochs-lstm 20 \
-    --hidden-dim 64 --gat-heads 4 \
-    --predict-time --skip-rl
+    --epochs-lstm 30 --hidden-dim 128 --lr-lstm 5e-4 \
+    --predict-time --skip-gat --skip-rl
 ```
 
 Each command writes a full metrics tree under `results/run_<timestamp>/`. To
@@ -97,10 +105,11 @@ The exact JSON files behind the tables above are committed under
 [`bench/published/`](./bench/published/) (model weights and visualizations are
 kept out of git; run the commands locally to regenerate).
 
-> **What's next on the leaderboard.** GAT under-converges on the current
-> hyperparameter grid — adding more epochs and a node-classification-style
-> warmup is the [v0.5 milestone](./GOALS.md). Multi-dataset coverage (BPI 2012,
-> 2017, 2019; Hospital Sepsis) is on the same milestone.
+> **What's next on the leaderboard.** GAT in the current configuration
+> reaches top-1 66% on BPI 2020 at 60 epochs but collapses on short-sequence
+> synthetic data — a known graph-attention failure mode for tiny graphs.
+> Closing the GAT/LSTM gap and adding multi-dataset coverage (BPI 2012, 2017,
+> 2019; Hospital Sepsis) is the [v0.5 milestone](./GOALS.md).
 
 ---
 

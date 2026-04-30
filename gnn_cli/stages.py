@@ -22,6 +22,8 @@ from models.gat_model import (
     evaluate_gat_model,
     expected_calibration_error,
     fit_temperature,
+    mean_reciprocal_rank,
+    top_k_accuracy,
     train_gat_model,
 )
 from models.lstm_model import (
@@ -173,6 +175,9 @@ def stage_train_gat(
 
     metrics = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
+        "top_3_accuracy": top_k_accuracy(y_true, y_prob, 3),
+        "top_5_accuracy": top_k_accuracy(y_true, y_prob, 5),
+        "mrr": mean_reciprocal_rank(y_true, y_prob),
         "mcc": float(matthews_corrcoef(y_true, y_pred)),
     }
     metrics.update(per_class_metrics(y_true, y_pred, le_task.classes_))
@@ -268,7 +273,17 @@ def stage_train_lstm(
     from sklearn.metrics import accuracy_score
 
     y_true_lstm = y_val.numpy()
-    lstm_metrics = {"accuracy": float(accuracy_score(y_true_lstm, preds))}
+    # The LSTM evaluator returns numpy probs; convert to torch for the
+    # ranking metrics so they share an implementation with the GAT.
+    import torch as _torch  # local alias to avoid the pyright complaint
+    y_true_t = _torch.from_numpy(y_true_lstm).long()
+    y_prob_t = _torch.from_numpy(probs)
+    lstm_metrics = {
+        "accuracy": float(accuracy_score(y_true_lstm, preds)),
+        "top_3_accuracy": top_k_accuracy(y_true_t, y_prob_t, 3),
+        "top_5_accuracy": top_k_accuracy(y_true_t, y_prob_t, 5),
+        "mrr": mean_reciprocal_rank(y_true_t, y_prob_t),
+    }
     class_names = (
         list(le_task.classes_) if le_task is not None
         else [str(i) for i in range(num_classes)]

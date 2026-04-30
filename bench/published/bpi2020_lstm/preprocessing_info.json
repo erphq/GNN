@@ -1,0 +1,13 @@
+{
+    "num_tasks": 17,
+    "num_resources": 2,
+    "num_cases_total": 10366,
+    "num_cases_train": 8293,
+    "num_cases_val": 2073,
+    "scaler_mode": "norm",
+    "date_range": [
+        "2017-01-09 09:49:50+00:00",
+        "2019-06-14 08:00:23+00:00"
+    ],
+    "seed": 42
+}

@@ -1,0 +1,12 @@
+{
+    "task_clusters": {
+        "Approve": 1,
+        "Archive": 1,
+        "Notify": 0,
+        "Process": 0,
+        "Reject": 2,
+        "Resubmit": 2,
+        "Review": 1,
+        "Submit": 1
+    }
+}

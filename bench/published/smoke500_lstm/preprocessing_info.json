@@ -1,0 +1,13 @@
+{
+    "num_tasks": 8,
+    "num_resources": 5,
+    "num_cases_total": 500,
+    "num_cases_train": 400,
+    "num_cases_val": 100,
+    "scaler_mode": "norm",
+    "date_range": [
+        "2025-01-01 10:00:00+00:00",
+        "2025-01-31 10:51:54+00:00"
+    ],
+    "seed": 42
+}

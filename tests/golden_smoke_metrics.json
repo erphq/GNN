@@ -43,6 +43,9 @@
   },
   "gat_metrics.json": {
     "accuracy": 0.17857142857142858,
+    "top_3_accuracy": 0.5357142686843872,
+    "top_5_accuracy": 0.7857142686843872,
+    "mrr": 0.4106292724609375,
     "mcc": 0.0,
     "per_class": {
       "Approve": {
@@ -104,6 +107,9 @@
   },
   "lstm_metrics.json": {
     "accuracy": 0.8695652173913043,
+    "top_3_accuracy": 0.9130434989929199,
+    "top_5_accuracy": 0.95652174949646,
+    "mrr": 0.9083850979804993,
     "per_class": {
       "Approve": {
         "precision": 0.625,

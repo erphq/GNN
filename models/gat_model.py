@@ -252,6 +252,40 @@ def fit_temperature(model, val_loader, device, lr: float = 0.01, max_iter: int =
     return float(log_T.exp().item())
 
 
+def top_k_accuracy(y_true, y_prob, k: int) -> float:
+    """Fraction of rows where the true label is in the top-k predictions.
+
+    For multi-class next-event prediction, top-1 is brutal (you must
+    nail the exact next event from N classes). Top-3 / top-5 are the
+    metrics process-mining literature actually reports because in
+    deployment you typically rank candidates and surface a short list,
+    not commit to a single guess.
+    """
+    if y_prob.ndim != 2 or y_prob.shape[0] == 0:
+        return 0.0
+    k = min(k, y_prob.shape[1])
+    topk_idx = y_prob.topk(k, dim=1).indices  # (n, k)
+    hits = (topk_idx == y_true.unsqueeze(1)).any(dim=1).float()
+    return float(hits.mean().item())
+
+
+def mean_reciprocal_rank(y_true, y_prob) -> float:
+    """MRR over predicted ranks of the true label.
+
+    For each row, find where the true label sits in the descending-prob
+    ranking and contribute 1/rank. Range [0, 1]; 1.0 means the true
+    label is always ranked first. Used in IR + sequence prediction as a
+    single number that respects ranking quality, not just argmax.
+    """
+    if y_prob.ndim != 2 or y_prob.shape[0] == 0:
+        return 0.0
+    # Rank of the true label = 1-based position in argsort descending.
+    sorted_idx = y_prob.argsort(dim=1, descending=True)
+    # row i gets the column where sorted_idx == y_true[i]
+    rank = (sorted_idx == y_true.unsqueeze(1)).float().argmax(dim=1) + 1
+    return float((1.0 / rank.float()).mean().item())
+
+
 def expected_calibration_error(y_true, y_prob, n_bins: int = 15) -> float:
     """ECE: weighted average of |bin_confidence - bin_accuracy| across
     equal-width confidence bins. 0 = perfectly calibrated.

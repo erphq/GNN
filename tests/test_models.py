@@ -236,3 +236,43 @@ def test_per_class_metrics_shape():
         assert {"precision", "recall", "f1", "support"} <= v.keys()
     assert 0.0 <= out["macro_f1"] <= 1.0
     assert 0.0 <= out["weighted_f1"] <= 1.0
+
+
+def test_top_k_accuracy_perfect_when_truth_first():
+    """If argmax = truth on every row, top-1 = top-3 = top-5 = 1.0."""
+    from models.gat_model import top_k_accuracy
+    n, k = 50, 8
+    y_true = torch.arange(n) % k
+    y_prob = torch.zeros(n, k)
+    y_prob[torch.arange(n), y_true] = 1.0
+    assert top_k_accuracy(y_true, y_prob, 1) == 1.0
+    assert top_k_accuracy(y_true, y_prob, 3) == 1.0
+    assert top_k_accuracy(y_true, y_prob, 5) == 1.0
+
+
+def test_top_k_accuracy_recovers_with_higher_k():
+    """When truth is consistently 2nd-best, top-1=0, top-3=1.0."""
+    from models.gat_model import top_k_accuracy
+    n, k = 20, 4
+    y_true = torch.zeros(n, dtype=torch.long)
+    y_prob = torch.zeros(n, k)
+    y_prob[:, 1] = 0.9   # argmax → class 1 (wrong)
+    y_prob[:, 0] = 0.1   # 2nd best → class 0 (correct)
+    assert top_k_accuracy(y_true, y_prob, 1) == 0.0
+    assert top_k_accuracy(y_true, y_prob, 2) == 1.0
+    assert top_k_accuracy(y_true, y_prob, 3) == 1.0
+
+
+def test_mrr_perfect_and_random():
+    """MRR=1 when truth is always rank-1; MRR≈1/k for uniform priors."""
+    from models.gat_model import mean_reciprocal_rank
+    n, k = 100, 5
+    y_true = torch.arange(n) % k
+    # Perfect: truth always rank 1.
+    perfect = torch.zeros(n, k)
+    perfect[torch.arange(n), y_true] = 1.0
+    assert mean_reciprocal_rank(y_true, perfect) == 1.0
+    # Worst: truth always rank k. With k=5 → 1/5 = 0.2.
+    worst = torch.ones(n, k)
+    worst[torch.arange(n), y_true] = 0.0
+    assert abs(mean_reciprocal_rank(y_true, worst) - 0.2) < 1e-6

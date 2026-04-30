@@ -1,0 +1,10 @@
+{
+    "num_long_cases": 519,
+    "cycle_time_95th_percentile_h": 596.0589583333333,
+    "num_rare_transitions": 10,
+    "num_deviant_traces": 0,
+    "total_traces": 10366,
+    "conformance_fitness": 1.0,
+    "conformance_precision": 0.24671760297353806,
+    "conformance_f_score": 0.395787470049502
+}
