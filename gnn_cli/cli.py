@@ -303,7 +303,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         },
         run_dir, "preprocessing_info.json",
     )
-    stage_analyze(df, run_dir)
+    stage_analyze(df, run_dir, le_task=le_task)
     print(f"Done. Analysis saved in {run_dir}")
     return EXIT_OK
 

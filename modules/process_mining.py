@@ -70,6 +70,135 @@ def analyze_rare_transitions(bottleneck_stats, rare_threshold=2):
     rare_trans = bottleneck_stats[bottleneck_stats["count"] <= rare_threshold]
     return rare_trans
 
+
+def analyze_bottleneck_drivers(
+    df: pd.DataFrame,
+    le_task=None,
+    top_n: int = 5,
+    freq_threshold: int = 10,
+    min_group_support: int = 3,
+):
+    """For the top-N slowest transitions, surface *why* — which case
+    attributes (resource, day-of-week, hour-of-day, amount bucket)
+    correlate with longer waits at that step.
+
+    For each candidate transition we group its event rows by each
+    attribute and report the spread (max-min of group-mean wait), the
+    worst group, and its support. A large spread on `resource` means
+    "this transition stalls when assigned to specific people"; a large
+    spread on `amount_bucket` means "high-value cases stall here".
+
+    Output is a dict keyed by ``"<src_name> -> <tgt_name>"`` (or the
+    encoded id when ``le_task is None``). Each value carries
+    ``n_transitions``, ``mean_wait_h``, and a list of drivers ranked
+    by spread.
+    """
+    df = df.copy()
+    df["next_task_id"] = df.groupby("case_id")["task_id"].shift(-1)
+    df["next_timestamp"] = df.groupby("case_id")["timestamp"].shift(-1)
+    transitions = df.dropna(subset=["next_task_id"]).copy()
+    transitions["wait_h"] = (
+        transitions["next_timestamp"] - transitions["timestamp"]
+    ).dt.total_seconds() / 3600.0
+    transitions["next_task_id"] = transitions["next_task_id"].astype(int)
+
+    # Bucket the (continuous) amount into quartiles so it can be
+    # treated like a categorical driver. Uses observed transitions
+    # only; if amounts are uniform across the log, qcut will collapse.
+    if "amount" in transitions.columns:
+        try:
+            transitions["amount_bucket"] = pd.qcut(
+                transitions["amount"], q=4, duplicates="drop",
+                labels=["Q1", "Q2", "Q3", "Q4"],
+            ).astype(str)
+        except (ValueError, TypeError):
+            transitions["amount_bucket"] = "all"
+
+    stats = (
+        transitions.groupby(["task_id", "next_task_id"])["wait_h"]
+        .agg(["mean", "count"])
+        .reset_index()
+    )
+    candidates = (
+        stats[stats["count"] >= freq_threshold]
+        .sort_values("mean", ascending=False)
+        .head(top_n)
+    )
+
+    def _name(t_id: int) -> str:
+        if le_task is None:
+            return str(t_id)
+        return str(le_task.inverse_transform([t_id])[0])
+
+    drivers_per_transition: dict = {}
+    for _, row in candidates.iterrows():
+        src, tgt = int(row["task_id"]), int(row["next_task_id"])
+        sub = transitions[
+            (transitions["task_id"] == src)
+            & (transitions["next_task_id"] == tgt)
+        ]
+
+        drivers = []
+        for feat in ("resource", "day_of_week", "hour_of_day", "amount_bucket"):
+            if feat not in sub.columns:
+                continue
+            grp = (
+                sub.groupby(feat)["wait_h"]
+                .agg(["mean", "count"])
+                .reset_index()
+            )
+            grp = grp[grp["count"] >= min_group_support]
+            if len(grp) < 2:
+                continue
+            spread = float(grp["mean"].max() - grp["mean"].min())
+            worst = grp.sort_values("mean", ascending=False).iloc[0]
+            best = grp.sort_values("mean", ascending=True).iloc[0]
+            drivers.append({
+                "feature": feat,
+                "spread_h": spread,
+                "worst_group": str(worst[feat]),
+                "worst_group_mean_h": float(worst["mean"]),
+                "worst_group_n": int(worst["count"]),
+                "best_group": str(best[feat]),
+                "best_group_mean_h": float(best["mean"]),
+                "best_group_n": int(best["count"]),
+            })
+
+        drivers.sort(key=lambda d: -d["spread_h"])
+        key = f"{_name(src)} -> {_name(tgt)}"
+        drivers_per_transition[key] = {
+            "n_transitions": int(row["count"]),
+            "mean_wait_h": float(row["mean"]),
+            "drivers": drivers,
+        }
+
+    return drivers_per_transition
+
+
+def render_bottleneck_drivers(drivers_per_transition: dict) -> str:
+    """Pretty-print the root-cause table as markdown."""
+    lines = []
+    for trans, payload in drivers_per_transition.items():
+        lines.append(
+            f"### `{trans}` — n={payload['n_transitions']}, "
+            f"mean wait {payload['mean_wait_h']:.1f} h"
+        )
+        if not payload["drivers"]:
+            lines.append("_No drivers above min support._")
+            continue
+        lines.append("")
+        lines.append("| feature | spread (h) | worst group | worst mean | n | best group | best mean |")
+        lines.append("|---|---:|---|---:|---:|---|---:|")
+        for d in payload["drivers"]:
+            lines.append(
+                f"| {d['feature']} | {d['spread_h']:.2f} "
+                f"| {d['worst_group']} | {d['worst_group_mean_h']:.2f} "
+                f"| {d['worst_group_n']} "
+                f"| {d['best_group']} | {d['best_group_mean_h']:.2f} |"
+            )
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
 def perform_conformance_checking(df):
     """Inductive miner + token replay conformance check (requires pm4py).
 

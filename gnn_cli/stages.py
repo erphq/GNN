@@ -46,12 +46,14 @@ from modules.data_preprocessing import (
     split_cases,
 )
 from modules.process_mining import (
+    analyze_bottleneck_drivers,
     analyze_bottlenecks,
     analyze_cycle_times,
     analyze_rare_transitions,
     analyze_transition_patterns,
     build_task_adjacency,
     perform_conformance_checking,
+    render_bottleneck_drivers,
     spectral_cluster_graph,
 )
 from modules.rl_optimization import ProcessEnv, get_optimal_policy, run_q_learning
@@ -441,11 +443,18 @@ def stage_baselines(train_df, val_df, run_dir: str) -> dict:
     return metrics
 
 
-def stage_analyze(df, run_dir: str):
+def stage_analyze(df, run_dir: str, le_task=None):
     bottleneck_stats, significant_bottlenecks = analyze_bottlenecks(df)
     case_merged, long_cases, cut95 = analyze_cycle_times(df)
     rare_trans = analyze_rare_transitions(bottleneck_stats)
     replayed, conformance = perform_conformance_checking(df)
+
+    # Root-cause analysis: for the top-5 slowest transitions, which case
+    # attributes drive the wait? Surfaces "this stalls when assigned to
+    # alice" or "high-amount cases stall here" — actionable signal that
+    # the mean-wait ranking alone hides.
+    drivers = analyze_bottleneck_drivers(df, le_task=le_task, top_n=5)
+
     save_metrics(
         {
             "num_long_cases": int(len(long_cases)),
@@ -456,9 +465,15 @@ def stage_analyze(df, run_dir: str):
             "conformance_fitness": float(conformance["fitness"]),
             "conformance_precision": float(conformance["precision"]),
             "conformance_f_score": float(conformance["f_score"]),
+            "bottleneck_drivers": drivers,
         },
         run_dir, "process_analysis.json",
     )
+    # Also write a human-readable markdown report to analysis/.
+    analysis_dir = os.path.join(run_dir, "analysis")
+    os.makedirs(analysis_dir, exist_ok=True)
+    with open(os.path.join(analysis_dir, "bottleneck_drivers.md"), "w") as f:
+        f.write(render_bottleneck_drivers(drivers))
     return bottleneck_stats, significant_bottlenecks, case_merged
 
 
@@ -575,7 +590,9 @@ def run_full_pipeline(data_path: str, cfg: RunConfig) -> str:
     bottleneck_stats = significant_bottlenecks = case_merged = None
     if not cfg.skip_analyze:
         print("\n[4/9] Process-mining analysis")
-        bottleneck_stats, significant_bottlenecks, case_merged = stage_analyze(df, run_dir)
+        bottleneck_stats, significant_bottlenecks, case_merged = stage_analyze(
+            df, run_dir, le_task=le_task,
+        )
     else:
         print("\n[4/9] Process-mining analysis — skipped")
 

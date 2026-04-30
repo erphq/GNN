@@ -108,3 +108,44 @@ def test_conformance_returns_four_metrics(synthetic_event_log):
     assert summary["num_deviant"] <= len(replayed)
     # The harmonic mean is at most the smaller of the two factors.
     assert summary["f_score"] <= max(summary["fitness"], summary["precision"]) + 1e-9
+
+
+def test_bottleneck_drivers_on_synthetic(synthetic_event_log):
+    """Driver analysis returns a non-empty dict on the synthetic log
+    and surfaces resource as a candidate driver."""
+    from modules.data_preprocessing import encode_categoricals
+    from modules.process_mining import analyze_bottleneck_drivers
+
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    drivers = analyze_bottleneck_drivers(df, le_task=le_task, top_n=3)
+    assert len(drivers) >= 1
+    # Every transition entry has the contract.
+    for trans, payload in drivers.items():
+        assert {"n_transitions", "mean_wait_h", "drivers"} <= payload.keys()
+        for d in payload["drivers"]:
+            assert {
+                "feature", "spread_h", "worst_group", "worst_group_mean_h",
+                "worst_group_n", "best_group", "best_group_mean_h",
+                "best_group_n",
+            } <= d.keys()
+            assert d["spread_h"] >= 0
+
+
+def test_bottleneck_drivers_renders_markdown():
+    from modules.process_mining import render_bottleneck_drivers
+    fake = {
+        "A -> B": {
+            "n_transitions": 100,
+            "mean_wait_h": 5.0,
+            "drivers": [
+                {
+                    "feature": "resource", "spread_h": 4.0,
+                    "worst_group": "alice", "worst_group_mean_h": 8.0, "worst_group_n": 30,
+                    "best_group": "bob", "best_group_mean_h": 4.0, "best_group_n": 25,
+                },
+            ],
+        },
+    }
+    md = render_bottleneck_drivers(fake)
+    assert "A -> B" in md
+    assert "alice" in md and "bob" in md
