@@ -93,6 +93,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
   "canary: end-to-end canary that runs `gnn smoke` and compares metrics to golden (slow; skip with -m 'not canary')",
+  "dataset_drift: per-dataset full training run + drift assertion (very slow; gated on local dataset presence; skip with -m 'not dataset_drift')",
 ]
 filterwarnings = [
   "ignore::DeprecationWarning",
