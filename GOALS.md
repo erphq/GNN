@@ -141,10 +141,13 @@ when the named acceptance criterion holds.
   produces inference artifacts that load in Rust / Java / browser
   without a Python interpreter. ONNX Runtime round-trip is asserted
   in `tests/test_export.py`.
-- **v0.7 — Rust orchestrator (prototype).** Single static binary that
-  shells into Python for ML kernels but owns CLI parsing, config
-  loading, scheduling, and artifact management. Same surface as
-  today's `gnn` CLI; same outputs byte-for-byte.
+- **v0.7 — Rust orchestrator (✅ prototype shipped).** Single static
+  binary `gnn-rs` (under `gnn_rs/`) that mirrors the Python `gnn` CLI
+  1:1 and shells out to `python -m gnn_cli` for the actual ML stages.
+  CLI parsing + TOML config loading run in Rust; run-dir management,
+  config validation, and stage scheduling are the v0.8 follow-ups
+  per `gnn_rs/README.md` roadmap. clap + anyhow + toml + serde;
+  3 integration tests + 2 unit tests + CI fmt/clippy gates.
 - **v0.8 — GAT v2: heterogeneous graph.** Today's GAT under-performs
   the LSTM on every dataset we have, but it's the only model that
   exposes per-event attention (used by `gnn explain`). The honest fix
