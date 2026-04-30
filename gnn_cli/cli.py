@@ -109,10 +109,17 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
         "--use-resource",
         action="store_true",
         help="Add the per-event resource ID as a parallel embedding to "
-             "the LSTM input. The previous default sees only task IDs — "
-             "strictly less information than the 1st-order Markov "
-             "baseline. Adding resource is the highest-leverage single "
-             "feature for closing the gap to Markov.",
+             "the LSTM input. Helps when the log has many resources "
+             "with distinct transition patterns; on logs where resource "
+             "is near-constant (e.g. BPI 2020 has only 2) it's a no-op.",
+    )
+    p.add_argument(
+        "--use-temporal",
+        action="store_true",
+        help="Add cyclic day-of-week + hour-of-day features (sin/cos, 4 "
+             "dims) to the LSTM input. Surfaces day/hour conditioning "
+             "Markov can't see — `gnn analyze` shows BPI 2020 has 122h "
+             "wait spread across day-of-week on `SUBMITTED → REJECTED`.",
     )
     p.add_argument(
         "--compile",
@@ -161,6 +168,7 @@ def _cfg_from_args(args: argparse.Namespace):
         transformer_heads=args.transformer_heads,
         compile_models=args.compile_models,
         use_resource=args.use_resource,
+        use_temporal=args.use_temporal,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,

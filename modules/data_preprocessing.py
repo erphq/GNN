@@ -163,6 +163,16 @@ def encode_categoricals(
     dt_seconds = (next_ts - df["timestamp"]).dt.total_seconds()
     df["dt_seconds"] = dt_seconds
     df["dt_log"] = np.log1p(dt_seconds.clip(lower=0))
+
+    # Cyclic encoding of day-of-week and hour-of-day. These are bounded
+    # periodic features (Mon=0..Sun=6, 0..23) — the cyclic encoding makes
+    # "Sunday → Monday" the same distance as "Monday → Tuesday" instead
+    # of the integer encoding's 6→0 jump. Used by the LSTM/Transformer
+    # via x_continuous when --use-temporal is set.
+    df["dow_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
+    df["dow_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
+    df["hod_sin"] = np.sin(2 * np.pi * df["hour_of_day"] / 24)
+    df["hod_cos"] = np.cos(2 * np.pi * df["hour_of_day"] / 24)
     df.dropna(subset=["next_task"], inplace=True)
     df["next_task"] = df["next_task"].astype(int)
     return df, le_task, le_resource

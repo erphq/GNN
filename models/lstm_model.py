@@ -47,20 +47,30 @@ class NextActivityLSTM(nn.Module):
         self, num_cls, emb_dim=64, hidden_dim=64, num_layers=1,
         predict_time: bool = False,
         num_resources: int | None = None,
+        n_continuous_dims: int = 0,
     ):
         super().__init__()
         self.predict_time = predict_time
         self.use_resource = num_resources is not None
+        self.n_continuous_dims = n_continuous_dims
         self.emb = nn.Embedding(num_cls + 1, emb_dim, padding_idx=0)
         if self.use_resource:
             self.resource_emb = nn.Embedding(num_resources + 1, emb_dim, padding_idx=0)
-        lstm_in = emb_dim * (2 if self.use_resource else 1)
+        lstm_in = (
+            emb_dim
+            + (emb_dim if self.use_resource else 0)
+            + n_continuous_dims
+        )
         self.lstm = nn.LSTM(lstm_in, hidden_dim, num_layers=num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, num_cls)
         if predict_time:
             self.dt_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, x, seq_len, x_resources: torch.Tensor | None = None):
+    def forward(
+        self, x, seq_len,
+        x_resources: torch.Tensor | None = None,
+        x_continuous: torch.Tensor | None = None,
+    ):
         seq_len_sorted, perm_idx = seq_len.sort(0, descending=True)
         x_sorted = x[perm_idx]
         x_emb = self.emb(x_sorted)
@@ -71,6 +81,14 @@ class NextActivityLSTM(nn.Module):
                 )
             r_sorted = x_resources[perm_idx]
             x_emb = torch.cat([x_emb, self.resource_emb(r_sorted)], dim=-1)
+        if self.n_continuous_dims > 0:
+            if x_continuous is None:
+                raise ValueError(
+                    f"model expects {self.n_continuous_dims} continuous dims "
+                    f"but x_continuous is None"
+                )
+            c_sorted = x_continuous[perm_idx]
+            x_emb = torch.cat([x_emb, c_sorted], dim=-1)
         packed = nn.utils.rnn.pack_padded_sequence(
             x_emb, seq_len_sorted.cpu(), batch_first=True, enforce_sorted=True
         )
@@ -85,38 +103,53 @@ class NextActivityLSTM(nn.Module):
         return logits
 
 
-def _build_prefixes(df):
-    """Yield ``(prefix_task_ids, prefix_resource_ids_or_None, next_task_id, dt_log_or_None)``.
+def _build_prefixes(df, *, continuous_features: list[str] | None = None):
+    """Yield 5-tuples
+    ``(task_pfx, resource_pfx_or_None, continuous_pfx_or_None, next_task, dt_or_None)``.
 
     Resource IDs are emitted in parallel with task IDs when
-    ``resource_id`` is present in ``df`` (the encoder column added by
-    ``encode_categoricals``); ``None`` otherwise. Stages opt in to
-    using them by setting ``num_resources`` on the model.
+    ``resource_id`` is present in ``df``. ``continuous_features`` is a
+    list of column names to pull out as per-event float vectors for the
+    LSTM's auxiliary continuous-input path; pass empty / None to skip.
+
+    Stages opt in by setting ``num_resources`` and ``n_continuous_dims``
+    on the model.
     """
     has_dt = "dt_log" in df.columns
     has_resource = "resource_id" in df.columns
+    cont_cols = list(continuous_features or [])
+    has_cont = bool(cont_cols) and all(c in df.columns for c in cont_cols)
     samples = []
     for _cid, cdata in df.groupby("case_id", sort=False):
         cdata = cdata.sort_values("timestamp")
         tasks_list = cdata["task_id"].tolist()
         resources_list = cdata["resource_id"].tolist() if has_resource else None
         dt_list = cdata["dt_log"].tolist() if has_dt else None
+        cont_arr = (
+            cdata[cont_cols].to_numpy(dtype=float) if has_cont else None
+        )
         for i in range(1, len(tasks_list)):
             dt = float(dt_list[i - 1]) if dt_list is not None else None
             r_pfx = resources_list[:i] if resources_list is not None else None
-            samples.append((tasks_list[:i], r_pfx, tasks_list[i], dt))
+            c_pfx = cont_arr[:i].tolist() if cont_arr is not None else None
+            samples.append((tasks_list[:i], r_pfx, c_pfx, tasks_list[i], dt))
     return samples
 
 
-def prepare_sequence_data(df, val_frac=0.2, seed=42, train_df=None, val_df=None):
+def prepare_sequence_data(
+    df, val_frac=0.2, seed=42, train_df=None, val_df=None,
+    continuous_features: list[str] | None = None,
+):
     """Build (prefix, next-task, dt_log) samples per split.
 
     Splits *cases* (not prefixes) so no future event of a case can
     leak into both halves. Callers can pass already-split frames.
+    ``continuous_features`` is the list of df columns to thread through
+    as per-event float vectors (see :func:`_build_prefixes`).
     """
     if train_df is not None and val_df is not None:
-        train_samples = _build_prefixes(train_df)
-        val_samples = _build_prefixes(val_df)
+        train_samples = _build_prefixes(train_df, continuous_features=continuous_features)
+        val_samples = _build_prefixes(val_df, continuous_features=continuous_features)
     else:
         case_ids = sorted(df["case_id"].unique())
         rng = random.Random(seed)
@@ -125,8 +158,8 @@ def prepare_sequence_data(df, val_frac=0.2, seed=42, train_df=None, val_df=None)
         val_cases = set(case_ids[:n_val])
         train_df_ = df[~df["case_id"].isin(val_cases)]
         val_df_ = df[df["case_id"].isin(val_cases)]
-        train_samples = _build_prefixes(train_df_)
-        val_samples = _build_prefixes(val_df_)
+        train_samples = _build_prefixes(train_df_, continuous_features=continuous_features)
+        val_samples = _build_prefixes(val_df_, continuous_features=continuous_features)
 
     random.Random(seed).shuffle(train_samples)
     random.Random(seed + 1).shuffle(val_samples)
@@ -137,30 +170,37 @@ def make_padded_dataset(sample_list, num_cls):
     """Pad prefix sequences and return tensors.
 
     Sample shape from :func:`_build_prefixes` is
-    ``(task_pfx, resource_pfx_or_None, next_task, dt_or_None)``. The
-    return shape stays ``(X_padded, X_lens, Y_labels, max_len)`` for
-    backwards compatibility; optional ``dt_targets`` and
-    ``resource_pad`` ride along as attributes on the padded tensor so
+    ``(task_pfx, resource_pfx_or_None, continuous_pfx_or_None,
+    next_task, dt_or_None)``. The return shape stays
+    ``(X_padded, X_lens, Y_labels, max_len)`` for backwards
+    compatibility; optional ``dt_targets``, ``resource_pad``, and
+    ``continuous_pad`` ride along as attributes on the padded tensor so
     no caller breaks if it ignores them.
     """
+    if not sample_list:
+        return (
+            torch.empty((0, 0), dtype=torch.long),
+            torch.empty((0,), dtype=torch.long),
+            torch.empty((0,), dtype=torch.long),
+            0,
+        )
+
+    first = sample_list[0]
+    # Backwards compatibility: support the old 4-tuple shape too.
+    if len(first) == 4:
+        # Old shape: (task, resource, next, dt). Insert None for continuous.
+        sample_list = [(t, r, None, n, d) for (t, r, n, d) in sample_list]
+        first = sample_list[0]
+
     max_len = max(len(s[0]) for s in sample_list)
-    X_padded, X_lens, Y_labels, R_padded, DT = [], [], [], [], []
-    has_resource = (
-        sample_list
-        and len(sample_list[0]) >= 2
-        and sample_list[0][1] is not None
-    )
-    has_dt = (
-        sample_list
-        and len(sample_list[0]) >= 4
-        and sample_list[0][3] is not None
-    )
+    X_padded, X_lens, Y_labels, R_padded, C_padded, DT = [], [], [], [], [], []
+    has_resource = first[1] is not None
+    has_continuous = first[2] is not None
+    n_cont_dims = len(first[2][0]) if has_continuous and first[2] else 0
+    has_dt = len(first) >= 5 and first[4] is not None
 
     for sample in sample_list:
-        pfx = sample[0]
-        r_pfx = sample[1]
-        nxt = sample[2]
-        dt = sample[3] if len(sample) >= 4 else None
+        pfx, r_pfx, c_pfx, nxt, dt = sample
         seqlen = len(pfx)
         X_lens.append(seqlen)
         seq = [(tid + 1) for tid in pfx]  # shift for pad=0
@@ -171,14 +211,18 @@ def make_padded_dataset(sample_list, num_cls):
             r_seq = [(rid + 1) for rid in r_pfx]
             r_seq += [0] * (max_len - seqlen)
             R_padded.append(r_seq)
+        if has_continuous:
+            c_seq = list(c_pfx)
+            c_seq += [[0.0] * n_cont_dims] * (max_len - seqlen)
+            C_padded.append(c_seq)
         if has_dt:
             DT.append(float(dt))
 
     Xp = torch.tensor(X_padded, dtype=torch.long)
     if has_resource:
-        # Resource sequence rides as an attribute so the 4-tuple return
-        # shape stays unchanged for legacy callers.
         Xp.resource_pad = torch.tensor(R_padded, dtype=torch.long)
+    if has_continuous:
+        Xp.continuous_pad = torch.tensor(C_padded, dtype=torch.float)
     if has_dt:
         Xp.dt_targets = torch.tensor(DT, dtype=torch.float)
     return (
@@ -220,6 +264,9 @@ def train_lstm_model(
         and hasattr(X_train_pad, "resource_pad")
     )
     R_train_pad = X_train_pad.resource_pad if use_resource else None
+    n_cont = getattr(model, "n_continuous_dims", 0)
+    use_continuous = n_cont > 0 and hasattr(X_train_pad, "continuous_pad")
+    C_train_pad = X_train_pad.continuous_pad if use_continuous else None
 
     for ep in range(1, epochs + 1):
         model.train()
@@ -234,9 +281,15 @@ def train_lstm_model(
             blen = X_train_len[idx].to(device)
             by = y_train[idx].to(device)
             br = R_train_pad[idx].to(device) if use_resource else None
+            bc = C_train_pad[idx].to(device) if use_continuous else None
 
             optimizer.zero_grad()
-            out = model(bx, blen, x_resources=br) if use_resource else model(bx, blen)
+            kw = {}
+            if use_resource:
+                kw["x_resources"] = br
+            if use_continuous:
+                kw["x_continuous"] = bc
+            out = model(bx, blen, **kw) if kw else model(bx, blen)
             if predict_time:
                 logits, dt_pred = out
                 bdt = dt_targets[idx].to(device)
@@ -282,6 +335,9 @@ def evaluate_lstm_model(
         and hasattr(X_test_pad, "resource_pad")
     )
     R_test_pad = X_test_pad.resource_pad if use_resource else None
+    n_cont = getattr(model, "n_continuous_dims", 0)
+    use_continuous = n_cont > 0 and hasattr(X_test_pad, "continuous_pad")
+    C_test_pad = X_test_pad.continuous_pad if use_continuous else None
 
     with torch.no_grad():
         for start in range(0, test_size, batch_size):
@@ -289,7 +345,13 @@ def evaluate_lstm_model(
             bx = X_test_pad[start:end].to(device)
             blen = X_test_len[start:end].to(device)
             br = R_test_pad[start:end].to(device) if use_resource else None
-            out = model(bx, blen, x_resources=br) if use_resource else model(bx, blen)
+            bc = C_test_pad[start:end].to(device) if use_continuous else None
+            kw = {}
+            if use_resource:
+                kw["x_resources"] = br
+            if use_continuous:
+                kw["x_continuous"] = bc
+            out = model(bx, blen, **kw) if kw else model(bx, blen)
             if predict_time:
                 logits, dt_pred = out
                 dt_pred_list.append(dt_pred.cpu().numpy())
@@ -333,6 +395,9 @@ def fit_temperature_lstm(
         and hasattr(X_val_pad, "resource_pad")
     )
     R_val_pad = X_val_pad.resource_pad if use_resource else None
+    n_cont = getattr(model, "n_continuous_dims", 0)
+    use_continuous = n_cont > 0 and hasattr(X_val_pad, "continuous_pad")
+    C_val_pad = X_val_pad.continuous_pad if use_continuous else None
 
     with torch.no_grad():
         for start in range(0, test_size, batch_size):
@@ -340,7 +405,13 @@ def fit_temperature_lstm(
             bx = X_val_pad[start:end].to(device)
             blen = X_val_len[start:end].to(device)
             br = R_val_pad[start:end].to(device) if use_resource else None
-            out = model(bx, blen, x_resources=br) if use_resource else model(bx, blen)
+            bc = C_val_pad[start:end].to(device) if use_continuous else None
+            kw = {}
+            if use_resource:
+                kw["x_resources"] = br
+            if use_continuous:
+                kw["x_continuous"] = bc
+            out = model(bx, blen, **kw) if kw else model(bx, blen)
             logits = out[0] if isinstance(out, tuple) else out
             logits_list.append(logits.cpu())
 

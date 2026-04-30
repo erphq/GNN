@@ -95,6 +95,8 @@ class RunConfig:
     transformer_heads: int = 4
     compile_models: bool = False
     use_resource: bool = False
+    use_temporal: bool = False
+    use_dt_input: bool = False
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -261,12 +263,25 @@ def stage_train_lstm(
     baseline: dict | None = None,
     le_task=None,
 ):
-    # The Rust hot path doesn't carry dt targets or resource sequences
-    # yet, so it's only safe when *both* the time head and the resource
-    # embedding are off. Fall back to the Python prefix builder when
-    # either is enabled — it threads both through as tensor attributes.
-    use_rust_path = (not cfg.gat_predict_time) and (not cfg.use_resource)
+    # The Rust hot path doesn't carry dt / resource / continuous-feature
+    # tensors, so it's only safe when none of the rich-feature flags are
+    # set. Fall back to the Python prefix builder when any is on; it
+    # threads everything through as tensor attributes.
+    use_rust_path = (
+        not cfg.gat_predict_time
+        and not cfg.use_resource
+        and not cfg.use_temporal
+        and not cfg.use_dt_input
+    )
     dt_train = dt_val = None
+
+    # Build the list of continuous-feature columns to thread through.
+    # Step 2: cyclic encoding of day-of-week / hour-of-day. Step 3
+    # (dt-since-prev as input feature) requires a new column in
+    # encode_categoricals — tracked separately.
+    cont_cols: list[str] = []
+    if cfg.use_temporal:
+        cont_cols += ["dow_sin", "dow_cos", "hod_sin", "hod_cos"]
 
     if use_rust_path:
         from modules._fast import build_padded_prefixes_fast
@@ -284,7 +299,8 @@ def stage_train_lstm(
 
     if not use_rust_path:
         train_seq, val_seq = prepare_sequence_data(
-            df, train_df=train_df, val_df=val_df, seed=cfg.seed
+            df, train_df=train_df, val_df=val_df, seed=cfg.seed,
+            continuous_features=cont_cols or None,
         )
         X_train_pad, X_train_len, y_train, _ = make_padded_dataset(train_seq, num_classes)
         X_val_pad, X_val_len, y_val, _ = make_padded_dataset(val_seq, num_classes)
@@ -323,6 +339,7 @@ def stage_train_lstm(
             num_classes, emb_dim=cfg.hidden_dim, hidden_dim=cfg.hidden_dim, num_layers=1,
             predict_time=cfg.gat_predict_time,
             num_resources=num_resources,
+            n_continuous_dims=len(cont_cols),
         ).to(device)
     model = maybe_compile(
         model, enabled=cfg.compile_models, name=f"seq:{cfg.seq_arch}",
