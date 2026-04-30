@@ -314,7 +314,40 @@ The per-class breakdown reveals which transitions the extra training
 unlocked — visible in `gnn diff` but invisible in a single-number
 summary.
 
-## 10. What's reproducible
+## 10. Deploy outside Python — `gnn export onnx`
+
+Once a run looks good, serialize the trained sequence model to ONNX
+so it can run in any ONNX Runtime environment (Rust, Java, browser,
+mobile) without a Python interpreter. Bridge to the v0.7 Rust
+orchestrator milestone in GOALS.md.
+
+```bash
+gnn export onnx results/run_<ts>/
+# Writes:
+#   results/run_<ts>/models/lstm.onnx
+#   results/run_<ts>/models/lstm.onnx.meta.json   <- input/output schema
+```
+
+After export, inference from non-Python:
+
+```python
+# This is the same pattern any ONNX Runtime caller uses (Rust /
+# Java / browser bind to the same C++ kernels under the hood).
+import numpy as np
+import onnxruntime as ort
+
+sess = ort.InferenceSession("results/run_.../models/lstm.onnx")
+# Inputs follow the meta.json contract — `x` and `seq_len` here:
+prefix = np.array([[1, 2, 3]], dtype=np.int64)        # shape (1, T)
+seq_len = np.array([3], dtype=np.int64)               # shape (1,)
+logits, dt_pred = sess.run(None, {"x": prefix, "seq_len": seq_len})
+```
+
+The export round-trip is asserted in CI: `max(|torch −
+onnxruntime|) < 1e-4` per logit on a held-out batch
+(`tests/test_export.py::test_onnx_export_roundtrip`).
+
+## 11. What's reproducible
 
 - Every JSON file behind every README claim lives at
   `bench/published/<dataset>/metrics/`.

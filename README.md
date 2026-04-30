@@ -442,6 +442,7 @@ gnn explain  LOG.csv --case-id <id> --model best_gnn_model.pth
 gnn predict-suffix LOG.csv --case-id <id> --model lstm_next_activity.pth
 gnn whatif   LOG.csv --case-id <id> --swap-resource alice=bob
 gnn diff     run_a/ run_b/              # markdown delta between two runs
+gnn export   onnx run_a/                # serialize to ONNX for inference outside Python
 gnn serve    LOG.csv --run-dir results/run_<ts>/   # FastAPI /predict endpoint
 ```
 
@@ -457,6 +458,43 @@ python bench/seeds.py \
 
 Aggregates per-seed metrics into `mean ± std / min / max` so a reader
 can tell whether a 1pp difference is signal or noise.
+
+</details>
+
+<details>
+<summary><b>Deploy outside Python — ONNX export</b></summary>
+
+After training, serialize to ONNX so downstream consumers (Rust
+orchestrator, Java services, browser inference, ONNX Runtime) can run
+the model without a Python interpreter:
+
+```bash
+gnn export onnx results/run_<ts>/
+# → results/run_<ts>/models/lstm.onnx
+# → results/run_<ts>/models/lstm.onnx.meta.json
+```
+
+The sidecar `.meta.json` carries the input/output names, dynamic axes,
+and the architecture metadata needed to feed the model from a non-
+Python runtime. The export uses an `inference_forward` path that
+bypasses `pack_padded_sequence` (PyTorch's tracing exporter chokes on
+it); it's mathematically equivalent to the training-path forward up
+to FP noise, asserted in CI by `tests/test_export.py` to within
+`max(|torch − onnxruntime|) < 1e-4`.
+
+```python
+# Load and run from any ONNX Runtime — no Python model code needed:
+import onnxruntime as ort
+import numpy as np
+
+sess = ort.InferenceSession("results/run_<ts>/models/lstm.onnx")
+prefix = np.array([[1, 2, 3]], dtype=np.int64)        # shape (1, T)
+seq_len = np.array([3], dtype=np.int64)               # shape (1,)
+logits, dt_pred = sess.run(None, {"x": prefix, "seq_len": seq_len})
+```
+
+Install the export deps with `pip install -e .[export]` (adds
+`onnx>=1.17` and `onnxruntime>=1.20`).
 
 </details>
 
