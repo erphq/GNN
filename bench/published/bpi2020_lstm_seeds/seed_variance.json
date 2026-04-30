@@ -1,0 +1,1953 @@
+{
+  "seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "n_seeds": 5,
+  "passthrough_args": [
+    "--epochs-lstm",
+    "30",
+    "--hidden-dim",
+    "256",
+    "--lr-lstm",
+    "5e-4",
+    "--predict-time",
+    "--skip-gat",
+    "--skip-rl",
+    "--device",
+    "mps"
+  ],
+  "metrics": {
+    "preprocessing_info": {
+      "num_cases_total": {
+        "mean": 10366.0,
+        "std": 0.0,
+        "min": 10366.0,
+        "max": 10366.0,
+        "n": 5,
+        "values": [
+          10366.0,
+          10366.0,
+          10366.0,
+          10366.0,
+          10366.0
+        ]
+      },
+      "num_cases_train": {
+        "mean": 8293.0,
+        "std": 0.0,
+        "min": 8293.0,
+        "max": 8293.0,
+        "n": 5,
+        "values": [
+          8293.0,
+          8293.0,
+          8293.0,
+          8293.0,
+          8293.0
+        ]
+      },
+      "num_cases_val": {
+        "mean": 2073.0,
+        "std": 0.0,
+        "min": 2073.0,
+        "max": 2073.0,
+        "n": 5,
+        "values": [
+          2073.0,
+          2073.0,
+          2073.0,
+          2073.0,
+          2073.0
+        ]
+      },
+      "num_resources": {
+        "mean": 2.0,
+        "std": 0.0,
+        "min": 2.0,
+        "max": 2.0,
+        "n": 5,
+        "values": [
+          2.0,
+          2.0,
+          2.0,
+          2.0,
+          2.0
+        ]
+      },
+      "num_tasks": {
+        "mean": 17.0,
+        "std": 0.0,
+        "min": 17.0,
+        "max": 17.0,
+        "n": 5,
+        "values": [
+          17.0,
+          17.0,
+          17.0,
+          17.0,
+          17.0
+        ]
+      },
+      "seed": {
+        "mean": 44.0,
+        "std": 1.5811388300841898,
+        "min": 42.0,
+        "max": 46.0,
+        "n": 5,
+        "values": [
+          42.0,
+          43.0,
+          44.0,
+          45.0,
+          46.0
+        ]
+      }
+    },
+    "baseline_metrics": {
+      "markov_accuracy": {
+        "mean": 0.8573537051702088,
+        "std": 0.0032797808214372424,
+        "min": 0.8536876355748373,
+        "max": 0.8610162019177781,
+        "n": 5,
+        "values": [
+          0.8536876355748373,
+          0.8581575784067315,
+          0.8597110400352929,
+          0.8610162019177781,
+          0.8541960699164043
+        ]
+      },
+      "markov_coverage": {
+        "mean": 0.9998908469696592,
+        "std": 0.00010887216346769643,
+        "min": 0.9997814446508578,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          0.9997830802603037,
+          0.9997814446508578,
+          0.9998897099371347,
+          1.0,
+          1.0
+        ]
+      },
+      "most_common_accuracy": {
+        "mean": 0.22110984739057307,
+        "std": 0.002194530414639158,
+        "min": 0.21800021713169038,
+        "max": 0.22333737730230507,
+        "n": 5,
+        "values": [
+          0.2202819956616052,
+          0.22085018030816303,
+          0.22333737730230507,
+          0.22307946654910174,
+          0.21800021713169038
+        ]
+      },
+      "most_common_label": {
+        "mean": 3.0,
+        "std": 0.0,
+        "min": 3.0,
+        "max": 3.0,
+        "n": 5,
+        "values": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ]
+      },
+      "num_val_events": {
+        "mean": 9144.4,
+        "std": 72.94381399405984,
+        "min": 9067.0,
+        "max": 9220.0,
+        "n": 5,
+        "values": [
+          9220.0,
+          9151.0,
+          9067.0,
+          9073.0,
+          9211.0
+        ]
+      }
+    },
+    "clustering_results": {
+      "task_clusters.Declaration APPROVED by ADMINISTRATION": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration APPROVED by BUDGET OWNER": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration APPROVED by PRE_APPROVER": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration FINAL_APPROVED by SUPERVISOR": {
+        "mean": 1.2,
+        "std": 1.0954451150103321,
+        "min": 0.0,
+        "max": 2.0,
+        "n": 5,
+        "values": [
+          0.0,
+          2.0,
+          2.0,
+          0.0,
+          2.0
+        ]
+      },
+      "task_clusters.Declaration FOR_APPROVAL by ADMINISTRATION": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration FOR_APPROVAL by PRE_APPROVER": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration FOR_APPROVAL by SUPERVISOR": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration REJECTED by ADMINISTRATION": {
+        "mean": 1.2,
+        "std": 0.8366600265340756,
+        "min": 0.0,
+        "max": 2.0,
+        "n": 5,
+        "values": [
+          2.0,
+          0.0,
+          1.0,
+          2.0,
+          1.0
+        ]
+      },
+      "task_clusters.Declaration REJECTED by BUDGET OWNER": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration REJECTED by EMPLOYEE": {
+        "mean": 1.2,
+        "std": 0.8366600265340756,
+        "min": 0.0,
+        "max": 2.0,
+        "n": 5,
+        "values": [
+          2.0,
+          0.0,
+          1.0,
+          2.0,
+          1.0
+        ]
+      },
+      "task_clusters.Declaration REJECTED by MISSING": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration REJECTED by PRE_APPROVER": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration REJECTED by SUPERVISOR": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration SAVED by EMPLOYEE": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Declaration SUBMITTED by EMPLOYEE": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Payment Handled": {
+        "mean": 0.6,
+        "std": 0.5477225575051661,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "task_clusters.Request Payment": {
+        "mean": 1.2,
+        "std": 1.0954451150103321,
+        "min": 0.0,
+        "max": 2.0,
+        "n": 5,
+        "values": [
+          0.0,
+          2.0,
+          2.0,
+          0.0,
+          2.0
+        ]
+      }
+    },
+    "process_analysis": {
+      "bottleneck_drivers.Declaration APPROVED by BUDGET OWNER -> Declaration REJECTED by SUPERVISOR.mean_wait_h": {
+        "mean": 100.75214157706094,
+        "std": 0.0,
+        "min": 100.75214157706094,
+        "max": 100.75214157706094,
+        "n": 5,
+        "values": [
+          100.75214157706094,
+          100.75214157706094,
+          100.75214157706094,
+          100.75214157706094,
+          100.75214157706094
+        ]
+      },
+      "bottleneck_drivers.Declaration APPROVED by BUDGET OWNER -> Declaration REJECTED by SUPERVISOR.n_transitions": {
+        "mean": 31.0,
+        "std": 0.0,
+        "min": 31.0,
+        "max": 31.0,
+        "n": 5,
+        "values": [
+          31.0,
+          31.0,
+          31.0,
+          31.0,
+          31.0
+        ]
+      },
+      "bottleneck_drivers.Declaration FINAL_APPROVED by SUPERVISOR -> Declaration REJECTED by MISSING.mean_wait_h": {
+        "mean": 299.7875318761384,
+        "std": 0.0,
+        "min": 299.7875318761384,
+        "max": 299.7875318761384,
+        "n": 5,
+        "values": [
+          299.7875318761384,
+          299.7875318761384,
+          299.7875318761384,
+          299.7875318761384,
+          299.7875318761384
+        ]
+      },
+      "bottleneck_drivers.Declaration FINAL_APPROVED by SUPERVISOR -> Declaration REJECTED by MISSING.n_transitions": {
+        "mean": 61.0,
+        "std": 0.0,
+        "min": 61.0,
+        "max": 61.0,
+        "n": 5,
+        "values": [
+          61.0,
+          61.0,
+          61.0,
+          61.0,
+          61.0
+        ]
+      },
+      "bottleneck_drivers.Declaration REJECTED by EMPLOYEE -> Declaration SUBMITTED by EMPLOYEE.mean_wait_h": {
+        "mean": 124.28487768527083,
+        "std": 0.0,
+        "min": 124.28487768527083,
+        "max": 124.28487768527083,
+        "n": 5,
+        "values": [
+          124.28487768527083,
+          124.28487768527083,
+          124.28487768527083,
+          124.28487768527083,
+          124.28487768527083
+        ]
+      },
+      "bottleneck_drivers.Declaration REJECTED by EMPLOYEE -> Declaration SUBMITTED by EMPLOYEE.n_transitions": {
+        "mean": 1081.0,
+        "std": 0.0,
+        "min": 1081.0,
+        "max": 1081.0,
+        "n": 5,
+        "values": [
+          1081.0,
+          1081.0,
+          1081.0,
+          1081.0,
+          1081.0
+        ]
+      },
+      "bottleneck_drivers.Declaration REJECTED by MISSING -> Declaration SUBMITTED by EMPLOYEE.mean_wait_h": {
+        "mean": 205.45551912568305,
+        "std": 0.0,
+        "min": 205.45551912568305,
+        "max": 205.45551912568305,
+        "n": 5,
+        "values": [
+          205.45551912568305,
+          205.45551912568305,
+          205.45551912568305,
+          205.45551912568305,
+          205.45551912568305
+        ]
+      },
+      "bottleneck_drivers.Declaration REJECTED by MISSING -> Declaration SUBMITTED by EMPLOYEE.n_transitions": {
+        "mean": 61.0,
+        "std": 0.0,
+        "min": 61.0,
+        "max": 61.0,
+        "n": 5,
+        "values": [
+          61.0,
+          61.0,
+          61.0,
+          61.0,
+          61.0
+        ]
+      },
+      "bottleneck_drivers.Declaration SUBMITTED by EMPLOYEE -> Declaration REJECTED by ADMINISTRATION.mean_wait_h": {
+        "mean": 116.37124633345066,
+        "std": 0.0,
+        "min": 116.37124633345066,
+        "max": 116.37124633345066,
+        "n": 5,
+        "values": [
+          116.37124633345066,
+          116.37124633345066,
+          116.37124633345066,
+          116.37124633345066,
+          116.37124633345066
+        ]
+      },
+      "bottleneck_drivers.Declaration SUBMITTED by EMPLOYEE -> Declaration REJECTED by ADMINISTRATION.n_transitions": {
+        "mean": 947.0,
+        "std": 0.0,
+        "min": 947.0,
+        "max": 947.0,
+        "n": 5,
+        "values": [
+          947.0,
+          947.0,
+          947.0,
+          947.0,
+          947.0
+        ]
+      },
+      "conformance_f_score": {
+        "mean": 0.395787470049502,
+        "std": 0.0,
+        "min": 0.395787470049502,
+        "max": 0.395787470049502,
+        "n": 5,
+        "values": [
+          0.395787470049502,
+          0.395787470049502,
+          0.395787470049502,
+          0.395787470049502,
+          0.395787470049502
+        ]
+      },
+      "conformance_fitness": {
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "conformance_precision": {
+        "mean": 0.24671760297353806,
+        "std": 0.0,
+        "min": 0.24671760297353806,
+        "max": 0.24671760297353806,
+        "n": 5,
+        "values": [
+          0.24671760297353806,
+          0.24671760297353806,
+          0.24671760297353806,
+          0.24671760297353806,
+          0.24671760297353806
+        ]
+      },
+      "cycle_time_95th_percentile_h": {
+        "mean": 596.0589583333333,
+        "std": 0.0,
+        "min": 596.0589583333333,
+        "max": 596.0589583333333,
+        "n": 5,
+        "values": [
+          596.0589583333333,
+          596.0589583333333,
+          596.0589583333333,
+          596.0589583333333,
+          596.0589583333333
+        ]
+      },
+      "num_deviant_traces": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "num_long_cases": {
+        "mean": 519.0,
+        "std": 0.0,
+        "min": 519.0,
+        "max": 519.0,
+        "n": 5,
+        "values": [
+          519.0,
+          519.0,
+          519.0,
+          519.0,
+          519.0
+        ]
+      },
+      "num_rare_transitions": {
+        "mean": 10.0,
+        "std": 0.0,
+        "min": 10.0,
+        "max": 10.0,
+        "n": 5,
+        "values": [
+          10.0,
+          10.0,
+          10.0,
+          10.0,
+          10.0
+        ]
+      },
+      "total_traces": {
+        "mean": 10366.0,
+        "std": 0.0,
+        "min": 10366.0,
+        "max": 10366.0,
+        "n": 5,
+        "values": [
+          10366.0,
+          10366.0,
+          10366.0,
+          10366.0,
+          10366.0
+        ]
+      }
+    },
+    "lstm_metrics": {
+      "accuracy": {
+        "mean": 0.819597572404414,
+        "std": 0.0058421547545795495,
+        "min": 0.811011487811712,
+        "max": 0.8255714285714286,
+        "n": 5,
+        "values": [
+          0.8165663914929341,
+          0.8214184797965527,
+          0.8234200743494424,
+          0.8255714285714286,
+          0.811011487811712
+        ]
+      },
+      "accuracy_ci_high": {
+        "mean": 0.8284551231193927,
+        "std": 0.005797527370682073,
+        "min": 0.8199845895208742,
+        "max": 0.834075,
+        "n": 5,
+        "values": [
+          0.8251084371064783,
+          0.8309586041254592,
+          0.8321489848441521,
+          0.834075,
+          0.8199845895208742
+        ]
+      },
+      "accuracy_ci_low": {
+        "mean": 0.810530514611091,
+        "std": 0.006101242144039112,
+        "min": 0.8014850098066685,
+        "max": 0.8172107142857143,
+        "n": 5,
+        "values": [
+          0.8078179655799635,
+          0.8120196383159084,
+          0.8141192450672005,
+          0.8172107142857143,
+          0.8014850098066685
+        ]
+      },
+      "dt_mae_hours": {
+        "mean": 49.347464677598744,
+        "std": 0.89820765603505,
+        "min": 48.37190972222222,
+        "max": 50.77517318725586,
+        "n": 5,
+        "values": [
+          48.37190972222222,
+          49.4234619140625,
+          50.77517318725586,
+          48.869144439697266,
+          49.29763412475586
+        ]
+      },
+      "ece_after_calibration": {
+        "mean": 0.020344654098153114,
+        "std": 0.008876558209147576,
+        "min": 0.008817298337817192,
+        "max": 0.03114369884133339,
+        "n": 5,
+        "values": [
+          0.008817298337817192,
+          0.01798754744231701,
+          0.027148446068167686,
+          0.016626279801130295,
+          0.03114369884133339
+        ]
+      },
+      "ece_before_calibration": {
+        "mean": 0.025278548896312713,
+        "std": 0.009261979615712415,
+        "min": 0.012114029377698898,
+        "max": 0.036983877420425415,
+        "n": 5,
+        "values": [
+          0.012114029377698898,
+          0.024374455213546753,
+          0.03028169833123684,
+          0.022638684138655663,
+          0.036983877420425415
+        ]
+      },
+      "lift_over_markov": {
+        "mean": -0.037756132765794835,
+        "std": 0.00309816886554025,
+        "min": -0.04318458210469234,
+        "max": -0.035444773346349434,
+        "n": 5,
+        "values": [
+          -0.037121244081903204,
+          -0.036739098610178766,
+          -0.03629096568585044,
+          -0.035444773346349434,
+          -0.04318458210469234
+        ]
+      },
+      "lift_over_most_common": {
+        "mean": 0.5984877250138408,
+        "std": 0.003799764844966994,
+        "min": 0.5930112706800216,
+        "max": 0.6024919620223269,
+        "n": 5,
+        "values": [
+          0.5962843958313289,
+          0.6005682994883896,
+          0.6000826970471373,
+          0.6024919620223269,
+          0.5930112706800216
+        ]
+      },
+      "macro_f1": {
+        "mean": 0.28461344716245346,
+        "std": 0.004344726195000514,
+        "min": 0.28186041477016915,
+        "max": 0.29228062816195566,
+        "n": 5,
+        "values": [
+          0.28316604007786306,
+          0.28215980029258025,
+          0.28186041477016915,
+          0.28360035250969917,
+          0.29228062816195566
+        ]
+      },
+      "macro_f1_ci_high": {
+        "mean": 0.29017070446965704,
+        "std": 0.004348082060571366,
+        "min": 0.28712159009160015,
+        "max": 0.2978177264742304,
+        "n": 5,
+        "values": [
+          0.2886187446525707,
+          0.28801458441664324,
+          0.28712159009160015,
+          0.2892808767132406,
+          0.2978177264742304
+        ]
+      },
+      "macro_f1_ci_low": {
+        "mean": 0.2793378197845614,
+        "std": 0.00420672766219679,
+        "min": 0.276603661886509,
+        "max": 0.28679168674036604,
+        "n": 5,
+        "values": [
+          0.2775691021566963,
+          0.2774963041026121,
+          0.276603661886509,
+          0.27822834403662366,
+          0.28679168674036604
+        ]
+      },
+      "mrr": {
+        "mean": 0.8989762902259827,
+        "std": 0.003210620894136766,
+        "min": 0.8944311738014221,
+        "max": 0.9019071459770203,
+        "n": 5,
+        "values": [
+          0.8970251679420471,
+          0.8998046517372131,
+          0.9017133116722107,
+          0.9019071459770203,
+          0.8944311738014221
+        ]
+      },
+      "mrr_ci_high": {
+        "mean": 0.9039578956365585,
+        "std": 0.0031533298954751375,
+        "min": 0.8994553610682487,
+        "max": 0.9067348837852478,
+        "n": 5,
+        "values": [
+          0.9019690364599228,
+          0.905131171643734,
+          0.9064990252256393,
+          0.9067348837852478,
+          0.8994553610682487
+        ]
+      },
+      "mrr_ci_low": {
+        "mean": 0.8938109722733497,
+        "std": 0.003246796028401071,
+        "min": 0.889351949095726,
+        "max": 0.8971173167228699,
+        "n": 5,
+        "values": [
+          0.8918510392308235,
+          0.8942126303911209,
+          0.8965219259262085,
+          0.8971173167228699,
+          0.889351949095726
+        ]
+      },
+      "per_class.Declaration APPROVED by ADMINISTRATION.f1": {
+        "mean": 0.8382445076633985,
+        "std": 0.005212901274890582,
+        "min": 0.8307770961145194,
+        "max": 0.8431929733918884,
+        "n": 5,
+        "values": [
+          0.8307770961145194,
+          0.8408916218293621,
+          0.8431929733918884,
+          0.8414539829853055,
+          0.8349068639959173
+        ]
+      },
+      "per_class.Declaration APPROVED by ADMINISTRATION.precision": {
+        "mean": 0.7225220206493516,
+        "std": 0.007981272301273193,
+        "min": 0.7111597374179431,
+        "max": 0.7298747763864043,
+        "n": 5,
+        "values": [
+          0.7111597374179431,
+          0.7267493356953055,
+          0.7298747763864043,
+          0.7275969683459652,
+          0.7172292854011398
+        ]
+      },
+      "per_class.Declaration APPROVED by ADMINISTRATION.recall": {
+        "mean": 0.9981676562752858,
+        "std": 0.0006066123912469617,
+        "min": 0.9975550122249389,
+        "max": 0.9987789987789988,
+        "n": 5,
+        "values": [
+          0.9987707437000615,
+          0.9975683890577508,
+          0.998165137614679,
+          0.9975550122249389,
+          0.9987789987789988
+        ]
+      },
+      "per_class.Declaration APPROVED by ADMINISTRATION.support": {
+        "mean": 1636.2,
+        "std": 6.457553716385176,
+        "min": 1627.0,
+        "max": 1645.0,
+        "n": 5,
+        "values": [
+          1627.0,
+          1645.0,
+          1635.0,
+          1636.0,
+          1638.0
+        ]
+      },
+      "per_class.Declaration APPROVED by BUDGET OWNER.f1": {
+        "mean": 0.0416299881633607,
+        "std": 0.08302349008136944,
+        "min": 0.0,
+        "max": 0.18974358974358974,
+        "n": 5,
+        "values": [
+          0.0035087719298245615,
+          0.0,
+          0.0,
+          0.0148975791433892,
+          0.18974358974358974
+        ]
+      },
+      "per_class.Declaration APPROVED by BUDGET OWNER.precision": {
+        "mean": 0.36845878136200716,
+        "std": 0.41140177779399667,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.4444444444444444,
+          0.3978494623655914
+        ]
+      },
+      "per_class.Declaration APPROVED by BUDGET OWNER.recall": {
+        "mean": 0.026782470279834075,
+        "std": 0.05475841376090375,
+        "min": 0.0,
+        "max": 0.12457912457912458,
+        "n": 5,
+        "values": [
+          0.0017574692442882249,
+          0.0,
+          0.0,
+          0.007575757575757576,
+          0.12457912457912458
+        ]
+      },
+      "per_class.Declaration APPROVED by BUDGET OWNER.support": {
+        "mean": 560.4,
+        "std": 24.296090220444935,
+        "min": 528.0,
+        "max": 594.0,
+        "n": 5,
+        "values": [
+          569.0,
+          561.0,
+          550.0,
+          528.0,
+          594.0
+        ]
+      },
+      "per_class.Declaration APPROVED by PRE_APPROVER.f1": {
+        "mean": 0.1820963822381257,
+        "std": 0.016706518866343764,
+        "min": 0.16783216783216784,
+        "max": 0.20915032679738563,
+        "n": 5,
+        "values": [
+          0.20915032679738563,
+          0.1830065359477124,
+          0.16783216783216784,
+          0.1686746987951807,
+          0.18181818181818182
+        ]
+      },
+      "per_class.Declaration APPROVED by PRE_APPROVER.precision": {
+        "mean": 0.8355513784461153,
+        "std": 0.05651774250840278,
+        "min": 0.7368421052631579,
+        "max": 0.875,
+        "n": 5,
+        "values": [
+          0.8421052631578947,
+          0.7368421052631579,
+          0.8571428571428571,
+          0.875,
+          0.8666666666666667
+        ]
+      },
+      "per_class.Declaration APPROVED by PRE_APPROVER.recall": {
+        "mean": 0.10235993723244244,
+        "std": 0.01077310458875173,
+        "min": 0.09302325581395349,
+        "max": 0.11940298507462686,
+        "n": 5,
+        "values": [
+          0.11940298507462686,
+          0.1044776119402985,
+          0.09302325581395349,
+          0.09333333333333334,
+          0.1015625
+        ]
+      },
+      "per_class.Declaration APPROVED by PRE_APPROVER.support": {
+        "mean": 135.0,
+        "std": 8.831760866327848,
+        "min": 128.0,
+        "max": 150.0,
+        "n": 5,
+        "values": [
+          134.0,
+          134.0,
+          129.0,
+          150.0,
+          128.0
+        ]
+      },
+      "per_class.Declaration FINAL_APPROVED by SUPERVISOR.f1": {
+        "mean": 0.7857802791529482,
+        "std": 0.013428349438013742,
+        "min": 0.7647900763358778,
+        "max": 0.8006445672191529,
+        "n": 5,
+        "values": [
+          0.7822506861848124,
+          0.7900274473924978,
+          0.7911886186324002,
+          0.8006445672191529,
+          0.7647900763358778
+        ]
+      },
+      "per_class.Declaration FINAL_APPROVED by SUPERVISOR.precision": {
+        "mean": 0.73750882648552,
+        "std": 0.007388377006161946,
+        "min": 0.730457069628364,
+        "max": 0.7495689655172414,
+        "n": 5,
+        "values": [
+          0.730457069628364,
+          0.7345810293492131,
+          0.7389627089584226,
+          0.7495689655172414,
+          0.7339743589743589
+        ]
+      },
+      "per_class.Declaration FINAL_APPROVED by SUPERVISOR.recall": {
+        "mean": 0.8410663522013597,
+        "std": 0.024722149149261845,
+        "min": 0.7983067729083665,
+        "max": 0.8591897233201581,
+        "n": 5,
+        "values": [
+          0.8419497784342689,
+          0.8545274616526473,
+          0.851358024691358,
+          0.8591897233201581,
+          0.7983067729083665
+        ]
+      },
+      "per_class.Declaration FINAL_APPROVED by SUPERVISOR.support": {
+        "mean": 2021.8,
+        "std": 8.526429498916883,
+        "min": 2008.0,
+        "max": 2031.0,
+        "n": 5,
+        "values": [
+          2031.0,
+          2021.0,
+          2025.0,
+          2024.0,
+          2008.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by ADMINISTRATION.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by ADMINISTRATION.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by ADMINISTRATION.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by ADMINISTRATION.support": {
+        "mean": 0.2,
+        "std": 0.4472135954999579,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by PRE_APPROVER.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by PRE_APPROVER.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by PRE_APPROVER.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by PRE_APPROVER.support": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by SUPERVISOR.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by SUPERVISOR.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by SUPERVISOR.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration FOR_APPROVAL by SUPERVISOR.support": {
+        "mean": 0.2,
+        "std": 0.4472135954999579,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by ADMINISTRATION.f1": {
+        "mean": 0.013361428638989424,
+        "std": 0.009788499890690886,
+        "min": 0.0,
+        "max": 0.023529411764705882,
+        "n": 5,
+        "values": [
+          0.0,
+          0.011049723756906077,
+          0.023529411764705882,
+          0.02247191011235955,
+          0.00975609756097561
+        ]
+      },
+      "per_class.Declaration REJECTED by ADMINISTRATION.precision": {
+        "mean": 0.6133333333333333,
+        "std": 0.4253103442063088,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          0.0,
+          1.0,
+          0.4,
+          0.6666666666666666,
+          1.0
+        ]
+      },
+      "per_class.Declaration REJECTED by ADMINISTRATION.recall": {
+        "mean": 0.0068014599779305665,
+        "std": 0.00502817452188755,
+        "min": 0.0,
+        "max": 0.012121212121212121,
+        "n": 5,
+        "values": [
+          0.0,
+          0.005555555555555556,
+          0.012121212121212121,
+          0.011428571428571429,
+          0.004901960784313725
+        ]
+      },
+      "per_class.Declaration REJECTED by ADMINISTRATION.support": {
+        "mean": 183.6,
+        "std": 15.469324484281788,
+        "min": 165.0,
+        "max": 204.0,
+        "n": 5,
+        "values": [
+          194.0,
+          180.0,
+          165.0,
+          175.0,
+          204.0
+        ]
+      },
+      "per_class.Declaration REJECTED by BUDGET OWNER.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by BUDGET OWNER.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by BUDGET OWNER.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by BUDGET OWNER.support": {
+        "mean": 11.6,
+        "std": 1.140175425099138,
+        "min": 10.0,
+        "max": 13.0,
+        "n": 5,
+        "values": [
+          11.0,
+          12.0,
+          10.0,
+          13.0,
+          12.0
+        ]
+      },
+      "per_class.Declaration REJECTED by EMPLOYEE.f1": {
+        "mean": 0.9881704391884721,
+        "std": 0.006225050601223544,
+        "min": 0.9813333333333333,
+        "max": 0.9956896551724138,
+        "n": 5,
+        "values": [
+          0.9956896551724138,
+          0.9835294117647059,
+          0.9813333333333333,
+          0.9868073878627969,
+          0.9934924078091106
+        ]
+      },
+      "per_class.Declaration REJECTED by EMPLOYEE.precision": {
+        "mean": 0.9787162348002033,
+        "std": 0.010052051789808353,
+        "min": 0.9675925925925926,
+        "max": 0.9914163090128756,
+        "n": 5,
+        "values": [
+          0.9914163090128756,
+          0.9675925925925926,
+          0.9735449735449735,
+          0.9739583333333334,
+          0.9870689655172413
+        ]
+      },
+      "per_class.Declaration REJECTED by EMPLOYEE.recall": {
+        "mean": 0.9978494623655914,
+        "std": 0.004808748338709221,
+        "min": 0.989247311827957,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          1.0,
+          0.989247311827957,
+          1.0,
+          1.0
+        ]
+      },
+      "per_class.Declaration REJECTED by EMPLOYEE.support": {
+        "mean": 208.4,
+        "std": 21.766947420343534,
+        "min": 186.0,
+        "max": 231.0,
+        "n": 5,
+        "values": [
+          231.0,
+          209.0,
+          186.0,
+          187.0,
+          229.0
+        ]
+      },
+      "per_class.Declaration REJECTED by MISSING.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by MISSING.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by MISSING.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by MISSING.support": {
+        "mean": 11.4,
+        "std": 3.714835124201342,
+        "min": 6.0,
+        "max": 16.0,
+        "n": 5,
+        "values": [
+          13.0,
+          10.0,
+          12.0,
+          16.0,
+          6.0
+        ]
+      },
+      "per_class.Declaration REJECTED by PRE_APPROVER.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by PRE_APPROVER.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by PRE_APPROVER.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by PRE_APPROVER.support": {
+        "mean": 14.8,
+        "std": 1.0954451150103321,
+        "min": 13.0,
+        "max": 16.0,
+        "n": 5,
+        "values": [
+          15.0,
+          16.0,
+          15.0,
+          13.0,
+          15.0
+        ]
+      },
+      "per_class.Declaration REJECTED by SUPERVISOR.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by SUPERVISOR.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by SUPERVISOR.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration REJECTED by SUPERVISOR.support": {
+        "mean": 61.2,
+        "std": 6.340346993658943,
+        "min": 53.0,
+        "max": 69.0,
+        "n": 5,
+        "values": [
+          65.0,
+          62.0,
+          57.0,
+          53.0,
+          69.0
+        ]
+      },
+      "per_class.Declaration SAVED by EMPLOYEE.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration SAVED by EMPLOYEE.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration SAVED by EMPLOYEE.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration SAVED by EMPLOYEE.support": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Declaration SUBMITTED by EMPLOYEE.f1": {
+        "mean": 0.9920812759929079,
+        "std": 0.0036617926264407895,
+        "min": 0.9875311720698254,
+        "max": 0.9959183673469387,
+        "n": 5,
+        "values": [
+          0.9959183673469387,
+          0.9909502262443439,
+          0.9875311720698254,
+          0.9902439024390244,
+          0.9957627118644068
+        ]
+      },
+      "per_class.Declaration SUBMITTED by EMPLOYEE.precision": {
+        "mean": 0.9991836734693877,
+        "std": 0.0018253616142855644,
+        "min": 0.9959183673469387,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          0.9959183673469387,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "per_class.Declaration SUBMITTED by EMPLOYEE.recall": {
+        "mean": 0.9851176231362181,
+        "std": 0.008400288730800304,
+        "min": 0.9753694581280788,
+        "max": 0.9959183673469387,
+        "n": 5,
+        "values": [
+          0.9959183673469387,
+          0.9820627802690582,
+          0.9753694581280788,
+          0.9806763285024155,
+          0.9915611814345991
+        ]
+      },
+      "per_class.Declaration SUBMITTED by EMPLOYEE.support": {
+        "mean": 223.0,
+        "std": 18.275666882497067,
+        "min": 203.0,
+        "max": 245.0,
+        "n": 5,
+        "values": [
+          245.0,
+          223.0,
+          203.0,
+          207.0,
+          237.0
+        ]
+      },
+      "per_class.Payment Handled.f1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Payment Handled.precision": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Payment Handled.recall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "n": 5,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Payment Handled.support": {
+        "mean": 0.2,
+        "std": 0.4472135954999579,
+        "min": 0.0,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "per_class.Request Payment.f1": {
+        "mean": 0.9970643007235067,
+        "std": 0.0009353629097306245,
+        "min": 0.996011964107677,
+        "max": 0.9985007496251874,
+        "n": 5,
+        "values": [
+          0.9965277777777778,
+          0.9972616380383371,
+          0.9970193740685543,
+          0.996011964107677,
+          0.9985007496251874
+        ]
+      },
+      "per_class.Request Payment.precision": {
+        "mean": 0.9943442149032687,
+        "std": 0.0018355710776679862,
+        "min": 0.9920556107249255,
+        "max": 0.9970059880239521,
+        "n": 5,
+        "values": [
+          0.993570722057369,
+          0.9950322901142573,
+          0.9940564635958395,
+          0.9920556107249255,
+          0.9970059880239521
+        ]
+      },
+      "per_class.Request Payment.recall": {
+        "mean": 0.9998006971132363,
+        "std": 0.00027290722527748153,
+        "min": 0.9995009980039921,
+        "max": 1.0,
+        "n": 5,
+        "values": [
+          0.9995024875621891,
+          0.9995009980039921,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "per_class.Request Payment.support": {
+        "mean": 2003.4,
+        "std": 5.366563145999495,
+        "min": 1998.0,
+        "max": 2010.0,
+        "n": 5,
+        "values": [
+          2010.0,
+          2004.0,
+          2007.0,
+          1998.0,
+          1998.0
+        ]
+      },
+      "temperature": {
+        "mean": 1.011049711704254,
+        "std": 0.038230827821296894,
+        "min": 0.9645254611968994,
+        "max": 1.0548242330551147,
+        "n": 5,
+        "values": [
+          1.0237501859664917,
+          1.03395676612854,
+          0.9781919121742249,
+          0.9645254611968994,
+          1.0548242330551147
+        ]
+      },
+      "time_loss_weight": {
+        "mean": 0.5,
+        "std": 0.0,
+        "min": 0.5,
+        "max": 0.5,
+        "n": 5,
+        "values": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "top_3_accuracy": {
+        "mean": 0.9758831262588501,
+        "std": 0.003118905662057938,
+        "min": 0.9708968997001648,
+        "max": 0.9784253239631653,
+        "n": 5,
+        "values": [
+          0.9708968997001648,
+          0.9771121740341187,
+          0.9781240820884705,
+          0.9748571515083313,
+          0.9784253239631653
+        ]
+      },
+      "top_3_accuracy_ci_high": {
+        "mean": 0.9793931114673614,
+        "std": 0.002818765425098308,
+        "min": 0.9748145937919617,
+        "max": 0.9815809577703476,
+        "n": 5,
+        "values": [
+          0.9748145937919617,
+          0.9804358631372452,
+          0.9814877197146415,
+          0.9786464229226113,
+          0.9815809577703476
+        ]
+      },
+      "top_3_accuracy_ci_low": {
+        "mean": 0.9722350844740868,
+        "std": 0.0034699770499492734,
+        "min": 0.9666258588433265,
+        "max": 0.9749894887208939,
+        "n": 5,
+        "values": [
+          0.9666258588433265,
+          0.9734387993812561,
+          0.9748355746269226,
+          0.9712857007980347,
+          0.9749894887208939
+        ]
+      },
+      "top_5_accuracy": {
+        "mean": 0.9980513453483582,
+        "std": 0.00042562187109257963,
+        "min": 0.9975981712341309,
+        "max": 0.9985714554786682,
+        "n": 5,
+        "values": [
+          0.9977613091468811,
+          0.9975981712341309,
+          0.9984272122383118,
+          0.9985714554786682,
+          0.9978985786437988
+        ]
+      },
+      "top_5_accuracy_ci_high": {
+        "mean": 0.9989988496899604,
+        "std": 0.00030287025831876536,
+        "min": 0.9987284541130066,
+        "max": 0.9993607059121132,
+        "n": 5,
+        "values": [
+          0.9987407326698303,
+          0.9987284541130066,
+          0.999285101890564,
+          0.9993607059121132,
+          0.9988792538642883
+        ]
+      },
+      "top_5_accuracy_ci_low": {
+        "mean": 0.9969771027565002,
+        "std": 0.0004915141429122576,
+        "min": 0.9964679479598999,
+        "max": 0.9975714087486267,
+        "n": 5,
+        "values": [
+          0.9966419339179993,
+          0.9964679479598999,
+          0.9974263906478882,
+          0.9975714087486267,
+          0.9967778325080872
+        ]
+      },
+      "weighted_f1": {
+        "mean": 0.7688341843963057,
+        "std": 0.004276161833647638,
+        "min": 0.7622041776573049,
+        "max": 0.7733954863877905,
+        "n": 5,
+        "values": [
+          0.7622041776573049,
+          0.7673743833459897,
+          0.7707070172295736,
+          0.7733954863877905,
+          0.77048985736087
+        ]
+      }
+    }
+  }
+}

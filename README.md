@@ -129,14 +129,19 @@ notebooks routinely don't (full audit history under
 
 ### Next-event prediction — LSTM vs Markov
 
+LSTM rows on BPI 2020 are reported as **mean ± std across 5 training
+seeds** (seeds 42–46). This separates training noise from sampling
+noise (which the bootstrap CIs already capture per-seed) and lets a
+reader judge whether two configs differ by more than chance.
+
 | dataset | cases | tasks | model | top-1 | **top-3** | top-5 | **MRR** | ECE¹ | dt MAE² |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|
-| **BPI 2020 Domestic Declarations** | 10,366 | 17 | most-common | 22.0% | 22.0% | 22.0% | 0.220 | — | — |
-| | | | **Markov 1st-order** | **85.4%** | 85.4% | 85.4% | 0.854 | — | — |
-| | | | **LSTM (this repo)** | 81.8% | **97.1%** | **99.8%** | **0.898** | **0.011** | 48.4 h |
-| Synthetic Markov chain (500 cases) | 500 | 8 | most-common | 23.2% | 23.2% | 23.2% | 0.232 | — | — |
-| | | | **Markov 1st-order** | **92.0%** | 92.0% | 92.0% | 0.920 | — | — |
-| | | | **LSTM (this repo)** | 90.5% | **100.0%** | **100.0%** | **0.953** | **0.018** | 0.43 h |
+| **BPI 2020 Domestic Declarations** | 10,366 | 17 | most-common | 22.0 % | 22.0 % | 22.0 % | 0.220 | — | — |
+| | | | **Markov 1st-order** | **85.4 %** | 85.4 % | 85.4 % | 0.854 | — | — |
+| | | | **LSTM (5 seeds)** | 82.0 ± 0.6 % | **97.6 ± 0.3 %** | **99.8 ± 0.0 %** | **0.899 ± 0.003** | **0.020 ± 0.009** | 49.3 ± 0.9 h |
+| Synthetic Markov chain (500 cases) | 500 | 8 | most-common | 23.2 % | 23.2 % | 23.2 % | 0.232 | — | — |
+| | | | **Markov 1st-order** | **92.0 %** | 92.0 % | 92.0 % | 0.920 | — | — |
+| | | | **LSTM (single seed)³** | 90.5 % | **100.0 %** | **100.0 %** | **0.953** | **0.018** | 0.43 h |
 
 **Where the LSTM dominates Markov:**
 
@@ -157,18 +162,26 @@ notebooks routinely don't (full audit history under
 
 ¹ Expected Calibration Error after post-hoc temperature scaling, 15 bins. Lower is better; 0 is perfectly calibrated.
 ² Mean absolute error of the time-to-next-event regression head, in hours.
+³ Single-seed for the synthetic row; the synthetic generator is deterministic enough that seed variance there is below table precision. The 5-seed BPI 2020 sweep is published under [`bench/published/bpi2020_lstm_seeds/seed_variance.json`](./bench/published/bpi2020_lstm_seeds/seed_variance.json) — every per-seed run + aggregate.
 
 ### What we tried, what didn't help (BPI 2020 ablation)
 
-The ~4 pp gap on top-1 is genuine — and ruling out feature-engineering
-fixes is itself a useful result. Three feature additions, all confirmed
-to be no-ops on BPI 2020 top-1 accuracy:
+Ruling out feature-engineering fixes for the top-1 gap is itself a
+useful result. Three feature additions, each tested against the same
+seed:
 
-| LSTM variant | top-1 | top-3 | MRR | ECE |
+| LSTM variant (single seed) | top-1 | top-3 | MRR | ECE |
 |---|---:|---:|---:|---:|
-| task only (`gnn run`) | 81.81% | 97.08% | 0.8978 | 0.0109 |
-| + `--use-resource` | 81.75% | 97.08% | 0.8975 | 0.0074 |
-| + `--use-temporal` | 81.78% | 97.26% | 0.8978 | 0.0068 |
+| task only (`gnn run`) | 81.81 % | 97.08 % | 0.8978 | 0.0109 |
+| + `--use-resource` | 81.75 % | 97.08 % | 0.8975 | 0.0074 |
+| + `--use-temporal` | 81.78 % | 97.26 % | 0.8978 | 0.0068 |
+
+> **The 5-seed sweep tells us these are within noise.** Cross-seed
+> std on top-1 is **±0.58 pp** — strictly larger than the 0.06 pp spread
+> between rows above. The features didn't help, but the rows were also
+> never going to settle within a fraction of the seed std anyway.
+> *Reporting cross-seed variance is what makes "no improvement"
+> measurable instead of asserted.*
 
 The diagnosis: BPI 2020 Domestic Declarations has only 2 distinct
 resources, and the cyclic temporal patterns (`analyze` shows 122 h
