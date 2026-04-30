@@ -179,6 +179,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_cl.add_argument("--out-dir", default="results")
     p_cl.add_argument("--seed", type=int, default=42)
 
+    p_sx = sub.add_parser(
+        "predict-suffix",
+        help="Beam-search rollout from a case prefix using the trained "
+             "sequence model. Returns top-B continuations ranked by joint "
+             "probability, with predicted total remaining cycle time.",
+    )
+    p_sx.add_argument("data_path")
+    p_sx.add_argument("--case-id", required=True)
+    p_sx.add_argument(
+        "--model", required=True,
+        help="Path to a trained sequence model "
+             "(lstm_next_activity.pth or transformer_next_activity.pth).",
+    )
+    p_sx.add_argument(
+        "--prefix-len", type=int, default=None,
+        help="Take only the first N events of the case as the prefix. "
+             "Default: use the full case.",
+    )
+    p_sx.add_argument("--beam", type=int, default=5)
+    p_sx.add_argument("--max-steps", type=int, default=20)
+    p_sx.add_argument(
+        "--seq-arch", choices=("lstm", "transformer"), default="lstm",
+        help="Architecture of the saved model.",
+    )
+    p_sx.add_argument("--hidden-dim", type=int, default=64)
+    p_sx.add_argument("--predict-time", action="store_true",
+                      help="Set if the saved model has the time-prediction head.")
+    p_sx.add_argument("--out-dir", default="results")
+    p_sx.add_argument("--seed", type=int, default=42)
+    p_sx.add_argument("--device", default=None)
+
     p_df = sub.add_parser(
         "diff",
         help="Compare two run directories' metrics and emit a markdown report.",
@@ -274,6 +305,94 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     )
     stage_analyze(df, run_dir)
     print(f"Done. Analysis saved in {run_dir}")
+    return EXIT_OK
+
+
+def cmd_predict_suffix(args: argparse.Namespace) -> int:
+    import json as _json
+
+    import torch as _torch
+
+    from gnn_cli.stages import setup_results_dir, stage_preprocess
+    from gnn_cli.suffix import predict_suffix, render_suffix_report
+    from models.lstm_model import NextActivityLSTM
+    from models.transformer_model import NextActivityTransformer
+    from modules.utils import pick_device, set_seed
+
+    if not os.path.exists(args.data_path):
+        print(f"error: dataset not found at {args.data_path}", file=sys.stderr)
+        return EXIT_DATA
+    if not os.path.exists(args.model):
+        print(f"error: model not found at {args.model}", file=sys.stderr)
+        return EXIT_DATA
+
+    set_seed(args.seed)
+    device = pick_device(args.device)
+    run_dir = setup_results_dir(args.out_dir)
+    print(f"Results will be saved in: {run_dir}")
+
+    # Reuse the same preprocessing pipeline so encoders match training.
+    df, _, _, le_task, _, _, _ = stage_preprocess(
+        args.data_path, val_frac=0.2, seed=args.seed
+    )
+    case_df = df[df["case_id"] == args.case_id].sort_values("timestamp")
+    if case_df.empty:
+        print(f"error: case_id={args.case_id!r} not found", file=sys.stderr)
+        return EXIT_DATA
+
+    full_prefix = case_df["task_id"].astype(int).tolist()
+    prefix = full_prefix[: args.prefix_len] if args.prefix_len else full_prefix
+    if not prefix:
+        print(f"error: prefix is empty after truncation", file=sys.stderr)
+        return EXIT_USAGE
+
+    num_classes = len(le_task.classes_)
+    if args.seq_arch == "transformer":
+        model = NextActivityTransformer(
+            num_classes, emb_dim=args.hidden_dim, hidden_dim=args.hidden_dim,
+            predict_time=args.predict_time,
+            max_len=max(args.max_steps + len(prefix), 64) + 8,
+        ).to(device)
+    else:
+        model = NextActivityLSTM(
+            num_classes, emb_dim=args.hidden_dim, hidden_dim=args.hidden_dim,
+            num_layers=1, predict_time=args.predict_time,
+        ).to(device)
+    state = _torch.load(args.model, map_location=device, weights_only=True)
+    model.load_state_dict(state)
+
+    completions = predict_suffix(
+        model, prefix,
+        beam=args.beam, max_steps=args.max_steps, device=device,
+    )
+    report = render_suffix_report(completions, le_task, prefix_len=len(prefix))
+    print(report)
+
+    out_dir = os.path.join(run_dir, "suffix_predictions")
+    os.makedirs(out_dir, exist_ok=True)
+    json_path = os.path.join(out_dir, f"suffix_{args.case_id}.json")
+    payload = {
+        "case_id": args.case_id,
+        "prefix": [
+            str(le_task.inverse_transform([t])[0]) for t in prefix
+        ],
+        "completions": [
+            {
+                "rank": i,
+                "tasks": [
+                    str(le_task.inverse_transform([t])[0])
+                    for t in seq[len(prefix):]
+                ],
+                "log_prob": logp,
+                "prob": prob,
+                "total_dt_hours": dt_seconds / 3600.0,
+            }
+            for i, (seq, logp, dt_seconds, prob) in enumerate(completions, 1)
+        ],
+    }
+    with open(json_path, "w") as f:
+        _json.dump(payload, f, indent=2, default=str)
+    print(f"Saved {json_path}")
     return EXIT_OK
 
 
@@ -435,6 +554,7 @@ COMMANDS = {
     "cluster": cmd_cluster,
     "baseline": cmd_baseline,
     "explain": cmd_explain,
+    "predict-suffix": cmd_predict_suffix,
     "diff": cmd_diff,
     "smoke": cmd_smoke,
     "version": cmd_version,
