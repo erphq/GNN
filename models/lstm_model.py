@@ -23,24 +23,54 @@ import torch.nn as nn
 
 
 class NextActivityLSTM(nn.Module):
-    """LSTM next-activity model with an optional time-prediction head."""
+    """LSTM next-activity model with an optional time-prediction head.
+
+    Optional resource conditioning
+    -----------------------------
+    The previous version of this model saw only the task-ID sequence —
+    *strictly less information* than the 1st-order Markov baseline,
+    which directly memorizes per-task transition probabilities. To beat
+    Markov on real industrial logs you need features Markov can't see;
+    the simplest and highest-leverage one is **resource**.
+
+    Pass ``num_resources=N`` to attach a parallel resource embedding.
+    Forward then takes a second padded tensor (``x_resources``) and
+    concatenates its embedding with the task embedding before feeding
+    to the LSTM. Doubles the LSTM input dim (2*emb_dim).
+
+    With ``num_resources=None`` (default) the model is identical to the
+    pre-feature version — important for backwards-compat with saved
+    checkpoints and the existing predict-suffix / serve callers.
+    """
 
     def __init__(
         self, num_cls, emb_dim=64, hidden_dim=64, num_layers=1,
         predict_time: bool = False,
+        num_resources: int | None = None,
     ):
         super().__init__()
         self.predict_time = predict_time
+        self.use_resource = num_resources is not None
         self.emb = nn.Embedding(num_cls + 1, emb_dim, padding_idx=0)
-        self.lstm = nn.LSTM(emb_dim, hidden_dim, num_layers=num_layers, batch_first=True)
+        if self.use_resource:
+            self.resource_emb = nn.Embedding(num_resources + 1, emb_dim, padding_idx=0)
+        lstm_in = emb_dim * (2 if self.use_resource else 1)
+        self.lstm = nn.LSTM(lstm_in, hidden_dim, num_layers=num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, num_cls)
         if predict_time:
             self.dt_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, x, seq_len):
+    def forward(self, x, seq_len, x_resources: torch.Tensor | None = None):
         seq_len_sorted, perm_idx = seq_len.sort(0, descending=True)
         x_sorted = x[perm_idx]
         x_emb = self.emb(x_sorted)
+        if self.use_resource:
+            if x_resources is None:
+                raise ValueError(
+                    "model has resource embedding but x_resources is None"
+                )
+            r_sorted = x_resources[perm_idx]
+            x_emb = torch.cat([x_emb, self.resource_emb(r_sorted)], dim=-1)
         packed = nn.utils.rnn.pack_padded_sequence(
             x_emb, seq_len_sorted.cpu(), batch_first=True, enforce_sorted=True
         )
@@ -56,21 +86,25 @@ class NextActivityLSTM(nn.Module):
 
 
 def _build_prefixes(df):
-    """Yield (prefix_task_ids, next_task_id, dt_log_or_None) per case.
+    """Yield ``(prefix_task_ids, prefix_resource_ids_or_None, next_task_id, dt_log_or_None)``.
 
-    ``dt_log`` is the log1p-seconds from the last event in the prefix
-    to the next event — i.e. the regression target for the time head.
-    Falls back to None when the column isn't present (legacy data).
+    Resource IDs are emitted in parallel with task IDs when
+    ``resource_id`` is present in ``df`` (the encoder column added by
+    ``encode_categoricals``); ``None`` otherwise. Stages opt in to
+    using them by setting ``num_resources`` on the model.
     """
     has_dt = "dt_log" in df.columns
+    has_resource = "resource_id" in df.columns
     samples = []
     for _cid, cdata in df.groupby("case_id", sort=False):
         cdata = cdata.sort_values("timestamp")
         tasks_list = cdata["task_id"].tolist()
+        resources_list = cdata["resource_id"].tolist() if has_resource else None
         dt_list = cdata["dt_log"].tolist() if has_dt else None
         for i in range(1, len(tasks_list)):
             dt = float(dt_list[i - 1]) if dt_list is not None else None
-            samples.append((tasks_list[:i], tasks_list[i], dt))
+            r_pfx = resources_list[:i] if resources_list is not None else None
+            samples.append((tasks_list[:i], r_pfx, tasks_list[i], dt))
     return samples
 
 
@@ -102,31 +136,50 @@ def prepare_sequence_data(df, val_frac=0.2, seed=42, train_df=None, val_df=None)
 def make_padded_dataset(sample_list, num_cls):
     """Pad prefix sequences and return tensors.
 
-    Returns ``(X_padded, X_lens, Y_labels, max_len)`` for backwards
-    compatibility, plus a ``DT_targets`` tensor on the dataset object
-    when the samples carry dt_log values. Callers that need it can
-    pull it via ``X_padded.dt_targets`` (set as an attribute).
+    Sample shape from :func:`_build_prefixes` is
+    ``(task_pfx, resource_pfx_or_None, next_task, dt_or_None)``. The
+    return shape stays ``(X_padded, X_lens, Y_labels, max_len)`` for
+    backwards compatibility; optional ``dt_targets`` and
+    ``resource_pad`` ride along as attributes on the padded tensor so
+    no caller breaks if it ignores them.
     """
     max_len = max(len(s[0]) for s in sample_list)
-    X_padded, X_lens, Y_labels, DT = [], [], [], []
-    has_dt = sample_list and len(sample_list[0]) >= 3 and sample_list[0][2] is not None
+    X_padded, X_lens, Y_labels, R_padded, DT = [], [], [], [], []
+    has_resource = (
+        sample_list
+        and len(sample_list[0]) >= 2
+        and sample_list[0][1] is not None
+    )
+    has_dt = (
+        sample_list
+        and len(sample_list[0]) >= 4
+        and sample_list[0][3] is not None
+    )
 
     for sample in sample_list:
-        pfx, nxt = sample[0], sample[1]
-        dt = sample[2] if len(sample) >= 3 else None
+        pfx = sample[0]
+        r_pfx = sample[1]
+        nxt = sample[2]
+        dt = sample[3] if len(sample) >= 4 else None
         seqlen = len(pfx)
         X_lens.append(seqlen)
         seq = [(tid + 1) for tid in pfx]  # shift for pad=0
         seq += [0] * (max_len - seqlen)
         X_padded.append(seq)
         Y_labels.append(nxt)
+        if has_resource:
+            r_seq = [(rid + 1) for rid in r_pfx]
+            r_seq += [0] * (max_len - seqlen)
+            R_padded.append(r_seq)
         if has_dt:
             DT.append(float(dt))
 
     Xp = torch.tensor(X_padded, dtype=torch.long)
+    if has_resource:
+        # Resource sequence rides as an attribute so the 4-tuple return
+        # shape stays unchanged for legacy callers.
+        Xp.resource_pad = torch.tensor(R_padded, dtype=torch.long)
     if has_dt:
-        # Store dt targets as a separate tensor; the legacy 4-tuple
-        # return shape is preserved for callers that don't need it.
         Xp.dt_targets = torch.tensor(DT, dtype=torch.float)
     return (
         Xp,
@@ -150,11 +203,23 @@ def train_lstm_model(
 ):
     """Train the LSTM. When ``dt_targets`` is supplied and the model has
     ``predict_time=True``, train with a joint CE + ``time_loss_weight``×MSE
-    loss; otherwise train with CE only."""
+    loss; otherwise train with CE only.
+
+    Resource conditioning is auto-detected: if ``model.use_resource`` is
+    True and the padded tensor has a ``resource_pad`` attribute (set by
+    ``make_padded_dataset``), the parallel resource sequence is passed
+    to ``model.forward(...)`` per batch. No flag — the model determines
+    whether features are used.
+    """
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     dataset_size = X_train_pad.size(0)
     predict_time = getattr(model, "predict_time", False) and dt_targets is not None
+    use_resource = (
+        getattr(model, "use_resource", False)
+        and hasattr(X_train_pad, "resource_pad")
+    )
+    R_train_pad = X_train_pad.resource_pad if use_resource else None
 
     for ep in range(1, epochs + 1):
         model.train()
@@ -168,9 +233,10 @@ def train_lstm_model(
             bx = X_train_pad[idx].to(device)
             blen = X_train_len[idx].to(device)
             by = y_train[idx].to(device)
+            br = R_train_pad[idx].to(device) if use_resource else None
 
             optimizer.zero_grad()
-            out = model(bx, blen)
+            out = model(bx, blen, x_resources=br) if use_resource else model(bx, blen)
             if predict_time:
                 logits, dt_pred = out
                 bdt = dt_targets[idx].to(device)
@@ -211,13 +277,19 @@ def evaluate_lstm_model(
     test_size = X_test_pad.size(0)
     logits_list, dt_pred_list = [], []
     predict_time = getattr(model, "predict_time", False) and dt_targets is not None
+    use_resource = (
+        getattr(model, "use_resource", False)
+        and hasattr(X_test_pad, "resource_pad")
+    )
+    R_test_pad = X_test_pad.resource_pad if use_resource else None
 
     with torch.no_grad():
         for start in range(0, test_size, batch_size):
             end = min(start + batch_size, test_size)
             bx = X_test_pad[start:end].to(device)
             blen = X_test_len[start:end].to(device)
-            out = model(bx, blen)
+            br = R_test_pad[start:end].to(device) if use_resource else None
+            out = model(bx, blen, x_resources=br) if use_resource else model(bx, blen)
             if predict_time:
                 logits, dt_pred = out
                 dt_pred_list.append(dt_pred.cpu().numpy())
@@ -256,13 +328,19 @@ def fit_temperature_lstm(
     model.eval()
     test_size = X_val_pad.size(0)
     logits_list = []
+    use_resource = (
+        getattr(model, "use_resource", False)
+        and hasattr(X_val_pad, "resource_pad")
+    )
+    R_val_pad = X_val_pad.resource_pad if use_resource else None
 
     with torch.no_grad():
         for start in range(0, test_size, batch_size):
             end = min(start + batch_size, test_size)
             bx = X_val_pad[start:end].to(device)
             blen = X_val_len[start:end].to(device)
-            out = model(bx, blen)
+            br = R_val_pad[start:end].to(device) if use_resource else None
+            out = model(bx, blen, x_resources=br) if use_resource else model(bx, blen)
             logits = out[0] if isinstance(out, tuple) else out
             logits_list.append(logits.cpu())
 

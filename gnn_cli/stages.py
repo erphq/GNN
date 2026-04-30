@@ -94,6 +94,7 @@ class RunConfig:
     transformer_layers: int = 4
     transformer_heads: int = 4
     compile_models: bool = False
+    use_resource: bool = False
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -260,10 +261,11 @@ def stage_train_lstm(
     baseline: dict | None = None,
     le_task=None,
 ):
-    # The Rust hot path doesn't carry dt targets yet, so it's only
-    # safe when the time head is off. With predict_time on, fall back
-    # to the Python prefix builder which threads dt_log through.
-    use_rust_path = (not cfg.gat_predict_time)
+    # The Rust hot path doesn't carry dt targets or resource sequences
+    # yet, so it's only safe when *both* the time head and the resource
+    # embedding are off. Fall back to the Python prefix builder when
+    # either is enabled — it threads both through as tensor attributes.
+    use_rust_path = (not cfg.gat_predict_time) and (not cfg.use_resource)
     dt_train = dt_val = None
 
     if use_rust_path:
@@ -286,8 +288,8 @@ def stage_train_lstm(
         )
         X_train_pad, X_train_len, y_train, _ = make_padded_dataset(train_seq, num_classes)
         X_val_pad, X_val_len, y_val, _ = make_padded_dataset(val_seq, num_classes)
-        # When predict_time is on, the prefix builder attaches per-sample
-        # dt targets to the padded tensor as an attribute.
+        # The prefix builder attaches dt_targets and resource_pad as
+        # tensor attributes when those features are present in the df.
         if cfg.gat_predict_time:
             dt_train = getattr(X_train_pad, "dt_targets", None)
             dt_val = getattr(X_val_pad, "dt_targets", None)
@@ -308,9 +310,19 @@ def stage_train_lstm(
             max_len=int(X_train_pad.shape[1]) + 8,
         ).to(device)
     else:
+        # Resource vocabulary size: encoder produces 0..N-1 across the
+        # full df, so we read off the train half's max + 1 (sufficient
+        # because the encoder was fit on the full df → val resources
+        # share the same id space).
+        num_resources = (
+            int(train_df["resource_id"].max()) + 1
+            if cfg.use_resource and "resource_id" in train_df.columns
+            else None
+        )
         model = NextActivityLSTM(
             num_classes, emb_dim=cfg.hidden_dim, hidden_dim=cfg.hidden_dim, num_layers=1,
             predict_time=cfg.gat_predict_time,
+            num_resources=num_resources,
         ).to(device)
     model = maybe_compile(
         model, enabled=cfg.compile_models, name=f"seq:{cfg.seq_arch}",

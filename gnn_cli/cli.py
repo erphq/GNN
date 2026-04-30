@@ -106,6 +106,15 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--transformer-layers", type=int, default=4)
     p.add_argument("--transformer-heads", type=int, default=4)
     p.add_argument(
+        "--use-resource",
+        action="store_true",
+        help="Add the per-event resource ID as a parallel embedding to "
+             "the LSTM input. The previous default sees only task IDs — "
+             "strictly less information than the 1st-order Markov "
+             "baseline. Adding resource is the highest-leverage single "
+             "feature for closing the gap to Markov.",
+    )
+    p.add_argument(
         "--compile",
         action="store_true",
         dest="compile_models",
@@ -151,6 +160,7 @@ def _cfg_from_args(args: argparse.Namespace):
         transformer_layers=args.transformer_layers,
         transformer_heads=args.transformer_heads,
         compile_models=args.compile_models,
+        use_resource=args.use_resource,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,
