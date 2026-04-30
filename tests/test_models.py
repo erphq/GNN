@@ -368,3 +368,21 @@ def test_bootstrap_ci_widens_on_small_n():
     width_big = hi_b - lo_b
 
     assert width_small > width_big * 3  # roughly sqrt(100) wider
+
+
+def test_maybe_compile_disabled_returns_model_unchanged():
+    """maybe_compile with enabled=False is the identity."""
+    from gnn_cli.stages import maybe_compile
+    m = NextActivityLSTM(num_cls=4, emb_dim=4, hidden_dim=4)
+    out = maybe_compile(m, enabled=False)
+    assert out is m
+
+
+def test_maybe_compile_enabled_returns_a_callable():
+    """When enabled, returns either a compiled wrapper or the model itself
+    on failure — both are callable with the same signature."""
+    from gnn_cli.stages import maybe_compile
+    m = NextActivityLSTM(num_cls=4, emb_dim=4, hidden_dim=4)
+    out = maybe_compile(m, enabled=True)
+    # Either the OptimizedModule or the original — both must be callable.
+    assert callable(out)

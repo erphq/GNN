@@ -105,6 +105,14 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
     )
     p.add_argument("--transformer-layers", type=int, default=4)
     p.add_argument("--transformer-heads", type=int, default=4)
+    p.add_argument(
+        "--compile",
+        action="store_true",
+        dest="compile_models",
+        help="Apply torch.compile (PyTorch 2+) to the GAT and the "
+             "sequence model. Falls back gracefully on architectures "
+             "the compiler can't handle (PyG GATConv, pack_padded LSTM).",
+    )
 
     p.add_argument("--skip-gat", action="store_true")
     p.add_argument("--skip-lstm", action="store_true")
@@ -142,6 +150,7 @@ def _cfg_from_args(args: argparse.Namespace):
         seq_arch=args.seq_arch,
         transformer_layers=args.transformer_layers,
         transformer_heads=args.transformer_heads,
+        compile_models=args.compile_models,
         skip_gat=args.skip_gat,
         skip_lstm=args.skip_lstm,
         skip_analyze=args.skip_analyze,
