@@ -1,0 +1,130 @@
+{
+    "model_arch": "lstm",
+    "accuracy": 0.817545823422415,
+    "top_3_accuracy": 0.9707569479942322,
+    "top_5_accuracy": 0.9977613091468811,
+    "mrr": 0.8974814414978027,
+    "accuracy_ci_low": 0.8085770253253113,
+    "accuracy_ci_high": 0.8258744927941793,
+    "macro_f1_ci_low": 0.27767222526662483,
+    "macro_f1_ci_high": 0.288763811397797,
+    "top_3_accuracy_ci_low": 0.9663460150361061,
+    "top_3_accuracy_ci_high": 0.9748145937919617,
+    "top_5_accuracy_ci_low": 0.9966419339179993,
+    "top_5_accuracy_ci_high": 0.9987407326698303,
+    "mrr_ci_low": 0.8921983957290649,
+    "mrr_ci_high": 0.9022349715232849,
+    "per_class": {
+        "Declaration APPROVED by ADMINISTRATION": {
+            "precision": 0.7139718804920914,
+            "recall": 0.9987707437000615,
+            "f1": 0.8326928004099411,
+            "support": 1627
+        },
+        "Declaration APPROVED by BUDGET OWNER": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 569
+        },
+        "Declaration APPROVED by PRE_APPROVER": {
+            "precision": 0.8421052631578947,
+            "recall": 0.11940298507462686,
+            "f1": 0.20915032679738563,
+            "support": 134
+        },
+        "Declaration FINAL_APPROVED by SUPERVISOR": {
+            "precision": 0.7307528711186729,
+            "recall": 0.8458887247661251,
+            "f1": 0.7841168416248289,
+            "support": 2031
+        },
+        "Declaration FOR_APPROVAL by ADMINISTRATION": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+        },
+        "Declaration FOR_APPROVAL by PRE_APPROVER": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+        },
+        "Declaration FOR_APPROVAL by SUPERVISOR": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 1
+        },
+        "Declaration REJECTED by ADMINISTRATION": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 194
+        },
+        "Declaration REJECTED by BUDGET OWNER": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 11
+        },
+        "Declaration REJECTED by EMPLOYEE": {
+            "precision": 0.9914163090128756,
+            "recall": 1.0,
+            "f1": 0.9956896551724138,
+            "support": 231
+        },
+        "Declaration REJECTED by MISSING": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 13
+        },
+        "Declaration REJECTED by PRE_APPROVER": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 15
+        },
+        "Declaration REJECTED by SUPERVISOR": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 65
+        },
+        "Declaration SAVED by EMPLOYEE": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+        },
+        "Declaration SUBMITTED by EMPLOYEE": {
+            "precision": 0.9959183673469387,
+            "recall": 0.9959183673469387,
+            "f1": 0.9959183673469387,
+            "support": 245
+        },
+        "Payment Handled": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 1
+        },
+        "Request Payment": {
+            "precision": 0.993570722057369,
+            "recall": 0.9995024875621891,
+            "f1": 0.9965277777777778,
+            "support": 2010
+        }
+    },
+    "macro_f1": 0.28318210406642863,
+    "weighted_f1": 0.7628912521443979,
+    "lift_over_markov": -0.03614181215242229,
+    "lift_over_most_common": 0.5972638277608098,
+    "dt_mae_hours": 48.37879774305556,
+    "time_loss_weight": 0.5,
+    "temperature": 1.0150684118270874,
+    "ece_before_calibration": 0.008634575642645359,
+    "ece_after_calibration": 0.007387337740510702
+}

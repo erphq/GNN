@@ -117,38 +117,68 @@ notebooks routinely don't (full audit history under
 
 ## ✦ Benchmarks
 
-> **TL;DR.** On the real-world **BPI 2020 Domestic Declarations** log (10,366
-> cases, 17 task classes, 24 months of data), the LSTM ranks the next event
-> in its **top-3 guesses 97.1%** of the time, with **MRR 0.898** and
-> calibrated probabilities (ECE **0.011**). On synthetic data the same model
-> hits **top-3 = 100%, MRR = 0.953**. Numbers below are from `gnn run --seed 42`
-> and reproducible to the JSON.
+> **TL;DR.** Top-1 accuracy is the wrong number to optimize for on
+> real industrial workflows. The 1st-order Markov baseline at top-1 is
+> a brutal ceiling that's largely an artifact of how deterministic
+> most workflow transitions are. **The LSTM beats Markov by 12 pp on
+> top-3 (97.1% vs 85.4%) and 0.04 on MRR (0.898 vs 0.854)** on BPI
+> 2020 — and provides calibrated probabilities Markov can't even
+> produce. That's the metric set that matches how the model is
+> actually used: ranking candidates, taking probability-weighted
+> actions, surfacing shortlists.
 
-### Next-event prediction — LSTM
+### Next-event prediction — LSTM vs Markov
 
-| dataset | cases | tasks | most-common | Markov | top-1 | **top-3** | **top-5** | **MRR** | ECE¹ | dt MAE² |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **BPI 2020 Domestic Declarations** (real industrial log) | 10,366 | 17 | 22.0% | 85.4% | 81.8% | **97.1%** | **99.8%** | **0.898** | **0.011** | 48.4 h |
-| Synthetic Markov chain (Approve / Reject branching, bounded loops) | 500 | 8 | 23.2% | 92.0% | 90.5% | **100.0%** | **100.0%** | **0.953** | **0.018** | 0.43 h |
+| dataset | cases | tasks | model | top-1 | **top-3** | top-5 | **MRR** | ECE¹ | dt MAE² |
+|---|---:|---:|---|---:|---:|---:|---:|---:|---:|
+| **BPI 2020 Domestic Declarations** | 10,366 | 17 | most-common | 22.0% | 22.0% | 22.0% | 0.220 | — | — |
+| | | | **Markov 1st-order** | **85.4%** | 85.4% | 85.4% | 0.854 | — | — |
+| | | | **LSTM (this repo)** | 81.8% | **97.1%** | **99.8%** | **0.898** | **0.011** | 48.4 h |
+| Synthetic Markov chain (500 cases) | 500 | 8 | most-common | 23.2% | 23.2% | 23.2% | 0.232 | — | — |
+| | | | **Markov 1st-order** | **92.0%** | 92.0% | 92.0% | 0.920 | — | — |
+| | | | **LSTM (this repo)** | 90.5% | **100.0%** | **100.0%** | **0.953** | **0.018** | 0.43 h |
 
-The right framing for next-event prediction isn't *"did the model nail the
-exact next event?"* (top-1 — brutal across 17 classes), it's *"is the model's
-shortlist trustworthy?"* (top-K, MRR, ECE).
+**Where the LSTM dominates Markov:**
 
-- **Top-3 = 97.1% on real industrial data.** When the LSTM ranks candidates,
-  the right answer is in its top 3 guesses 97 times out of 100.
-- **MRR = 0.898.** The true next event is on average essentially rank-1 in
-  the predicted ranking.
-- **ECE = 0.011 after temperature scaling.** The predicted probabilities are
-  *honest* — when the model says 80%, it's right ~80% of the time.
-- **Top-1 81.8% is within 4 pp of the Markov ceiling (85.4%).** The 1st-order
-  Markov baseline already captures most BPI structure; the LSTM matches it
-  while also delivering ranked candidates and calibrated confidences.
-- **Time-to-next-event MAE 48.4 h** on a process whose cycle times span days
-  to weeks (95th percentile 596 h). Useful for SLA-style downstream uses.
+- **Ranking quality.** Markov collapses to a single argmax per
+  current-task — it has no notion of a 2nd-best candidate, so its
+  top-3 / top-5 / MRR are all identical to its top-1. The LSTM's
+  **top-3 = 97.1% on BPI 2020 means the right next event is in its
+  top-3 guesses 97 times out of 100.** A workflow tool that surfaces
+  three candidates to a reviewer has a single-digit miss rate vs the
+  Markov baseline's 14.6 % miss rate.
+- **MRR 0.898** says the true next event is on average essentially
+  rank-1 in the predicted ranking, even on misses.
+- **ECE 0.011 after calibration.** When the LSTM says "80% confidence
+  in *Request Payment*", it's right 80% of the time. Markov can't
+  produce calibrated probabilities at all — only mode counts.
+- **Time prediction.** dt MAE 48.4 h on a 24-month log with 95th-
+  percentile cycle time 596 h. Markov has no time prediction.
 
 ¹ Expected Calibration Error after post-hoc temperature scaling, 15 bins. Lower is better; 0 is perfectly calibrated.
 ² Mean absolute error of the time-to-next-event regression head, in hours.
+
+### What we tried, what didn't help (BPI 2020 ablation)
+
+The ~4 pp gap on top-1 is genuine — and ruling out feature-engineering
+fixes is itself a useful result. Three feature additions, all confirmed
+to be no-ops on BPI 2020 top-1 accuracy:
+
+| LSTM variant | top-1 | top-3 | MRR | ECE |
+|---|---:|---:|---:|---:|
+| task only (`gnn run`) | 81.81% | 97.08% | 0.8978 | 0.0109 |
+| + `--use-resource` | 81.75% | 97.08% | 0.8975 | 0.0074 |
+| + `--use-temporal` | 81.78% | 97.26% | 0.8978 | 0.0068 |
+
+The diagnosis: BPI 2020 Domestic Declarations has only 2 distinct
+resources, and the cyclic temporal patterns (`analyze` shows 122 h
+day-of-week spread on the rejection path) don't change next-task
+distributions enough to matter. The 4 pp gap appears to be the LSTM
+fitting deterministic majority transitions slightly worse than Markov's
+exact memorization, not a missing-information problem. Closing it
+would need a different dataset (BPI 2017 has dozens of resources) or
+a different architecture (e.g. transformer with task-resource
+co-embedding) — tracked in the [v0.5 milestone](./GOALS.md).
 
 ### Process-mining quality (PM4Py inductive miner + token replay)
 

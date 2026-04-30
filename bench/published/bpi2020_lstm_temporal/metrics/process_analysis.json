@@ -1,0 +1,192 @@
+{
+    "num_long_cases": 519,
+    "cycle_time_95th_percentile_h": 596.0589583333333,
+    "num_rare_transitions": 10,
+    "num_deviant_traces": 0,
+    "total_traces": 10366,
+    "conformance_fitness": 1.0,
+    "conformance_precision": 0.24671760297353806,
+    "conformance_f_score": 0.395787470049502,
+    "bottleneck_drivers": {
+        "Declaration FINAL_APPROVED by SUPERVISOR -> Declaration REJECTED by MISSING": {
+            "n_transitions": 61,
+            "mean_wait_h": 299.7875318761384,
+            "drivers": [
+                {
+                    "feature": "hour_of_day",
+                    "spread_h": 2332.238888888889,
+                    "worst_group": "5.0",
+                    "worst_group_mean_h": 2383.4446296296296,
+                    "worst_group_n": 3,
+                    "best_group": "17.0",
+                    "best_group_mean_h": 51.20574074074074,
+                    "best_group_n": 3
+                },
+                {
+                    "feature": "amount_bucket",
+                    "spread_h": 590.7605726621049,
+                    "worst_group": "Q1",
+                    "worst_group_mean_h": 717.2162626262626,
+                    "worst_group_n": 11,
+                    "best_group": "Q4",
+                    "best_group_mean_h": 126.4556899641577,
+                    "best_group_n": 31
+                },
+                {
+                    "feature": "day_of_week",
+                    "spread_h": 580.9924394586894,
+                    "worst_group": "1.0",
+                    "worst_group_mean_h": 649.4608796296296,
+                    "worst_group_n": 12,
+                    "best_group": "0.0",
+                    "best_group_mean_h": 68.46844017094017,
+                    "best_group_n": 13
+                }
+            ]
+        },
+        "Declaration REJECTED by MISSING -> Declaration SUBMITTED by EMPLOYEE": {
+            "n_transitions": 61,
+            "mean_wait_h": 205.45551912568305,
+            "drivers": [
+                {
+                    "feature": "day_of_week",
+                    "spread_h": 611.4657222222222,
+                    "worst_group": "4.0",
+                    "worst_group_mean_h": 670.931,
+                    "worst_group_n": 5,
+                    "best_group": "0.0",
+                    "best_group_mean_h": 59.46527777777778,
+                    "best_group_n": 18
+                },
+                {
+                    "feature": "hour_of_day",
+                    "spread_h": 457.8239197530864,
+                    "worst_group": "10.0",
+                    "worst_group_mean_h": 484.7243518518518,
+                    "worst_group_n": 9,
+                    "best_group": "14.0",
+                    "best_group_mean_h": 26.90043209876543,
+                    "best_group_n": 9
+                },
+                {
+                    "feature": "amount_bucket",
+                    "spread_h": 379.7447727272727,
+                    "worst_group": "Q1",
+                    "worst_group_mean_h": 451.4808838383838,
+                    "worst_group_n": 11,
+                    "best_group": "Q3",
+                    "best_group_mean_h": 71.73611111111111,
+                    "best_group_n": 11
+                }
+            ]
+        },
+        "Declaration REJECTED by EMPLOYEE -> Declaration SUBMITTED by EMPLOYEE": {
+            "n_transitions": 1081,
+            "mean_wait_h": 124.28487768527083,
+            "drivers": [
+                {
+                    "feature": "hour_of_day",
+                    "spread_h": 643.6832592592593,
+                    "worst_group": "21.0",
+                    "worst_group_mean_h": 666.692888888889,
+                    "worst_group_n": 5,
+                    "best_group": "23.0",
+                    "best_group_mean_h": 23.00962962962963,
+                    "best_group_n": 3
+                },
+                {
+                    "feature": "day_of_week",
+                    "spread_h": 368.43888888888887,
+                    "worst_group": "6.0",
+                    "worst_group_mean_h": 410.65031746031747,
+                    "worst_group_n": 7,
+                    "best_group": "5.0",
+                    "best_group_mean_h": 42.21142857142858,
+                    "best_group_n": 7
+                },
+                {
+                    "feature": "amount_bucket",
+                    "spread_h": 44.91376186585744,
+                    "worst_group": "Q1",
+                    "worst_group_mean_h": 156.96759123093682,
+                    "worst_group_n": 204,
+                    "best_group": "Q4",
+                    "best_group_mean_h": 112.05382936507938,
+                    "best_group_n": 434
+                }
+            ]
+        },
+        "Declaration SUBMITTED by EMPLOYEE -> Declaration REJECTED by ADMINISTRATION": {
+            "n_transitions": 947,
+            "mean_wait_h": 116.37124633345066,
+            "drivers": [
+                {
+                    "feature": "hour_of_day",
+                    "spread_h": 644.4689259259259,
+                    "worst_group": "0.0",
+                    "worst_group_mean_h": 644.5312037037037,
+                    "worst_group_n": 3,
+                    "best_group": "23.0",
+                    "best_group_mean_h": 0.062277777777777786,
+                    "best_group_n": 5
+                },
+                {
+                    "feature": "day_of_week",
+                    "spread_h": 121.93661818595196,
+                    "worst_group": "4.0",
+                    "worst_group_mean_h": 185.81268449419568,
+                    "worst_group_n": 134,
+                    "best_group": "5.0",
+                    "best_group_mean_h": 63.87606630824372,
+                    "best_group_n": 31
+                },
+                {
+                    "feature": "amount_bucket",
+                    "spread_h": 88.51000248728974,
+                    "worst_group": "Q1",
+                    "worst_group_mean_h": 153.55402651131377,
+                    "worst_group_n": 329,
+                    "best_group": "Q2",
+                    "best_group_mean_h": 65.04402402402403,
+                    "best_group_n": 111
+                }
+            ]
+        },
+        "Declaration APPROVED by BUDGET OWNER -> Declaration REJECTED by SUPERVISOR": {
+            "n_transitions": 31,
+            "mean_wait_h": 100.75214157706094,
+            "drivers": [
+                {
+                    "feature": "hour_of_day",
+                    "spread_h": 98.88814814814813,
+                    "worst_group": "8.0",
+                    "worst_group_mean_h": 164.35398148148147,
+                    "worst_group_n": 3,
+                    "best_group": "14.0",
+                    "best_group_mean_h": 65.46583333333334,
+                    "best_group_n": 3
+                },
+                {
+                    "feature": "day_of_week",
+                    "spread_h": 43.0475,
+                    "worst_group": "3.0",
+                    "worst_group_mean_h": 122.13652777777777,
+                    "worst_group_n": 6,
+                    "best_group": "0.0",
+                    "best_group_mean_h": 79.08902777777777,
+                    "best_group_n": 6
+                },
+                {
+                    "feature": "amount_bucket",
+                    "spread_h": 34.420777777777786,
+                    "worst_group": "Q1",
+                    "worst_group_mean_h": 114.19207407407407,
+                    "worst_group_n": 15,
+                    "best_group": "Q4",
+                    "best_group_mean_h": 79.77129629629628,
+                    "best_group_n": 9
+                }
+            ]
+        }
+    }
+}
