@@ -35,6 +35,86 @@ Built for the questions you actually ask: *where do cases get stuck?*,
 
 ---
 
+## ✦ The goal
+
+If you have a workflow with timestamps — claims processing, customer
+onboarding, hospital admissions, expense approvals, supply-chain handoffs,
+incident management, *anything* logged as a sequence of events with case IDs
+— you have an **event log**. The job of process mining is to take that log
+and answer the six operational questions a process owner actually cares
+about:
+
+| # | Question | Command | What you get |
+|---|---|---|---|
+| 1 | Where do cases get stuck? | `gnn analyze log.csv` | Transitions ranked by mean wait time |
+| 2 | Which cases are anomalous? | `gnn analyze log.csv` | Cases above the 95th-pct cycle time + rare paths |
+| 3 | What happens next in this open case? | `gnn run log.csv` | Calibrated, ranked next-event predictions (top-3 ≈ 97% on BPI 2020) |
+| 4 | Does reality match the model? | `gnn analyze log.csv` | Conformance fitness, precision, F-score (don't trust fitness alone) |
+| 5 | Who should do what? | `gnn run log.csv` | Tabular Q-learning policy over `(task, resource)` |
+| 6 | Are these activities really distinct? | `gnn cluster log.csv -k 3` | Spectral clusters of the task adjacency |
+
+The point isn't to top a leaderboard on any single metric. It's to **answer
+all six honestly, in one command, with enough reproducibility and calibration
+that downstream decisions can trust the output** — instead of being a
+notebook scaffold you reassemble each project from scratch.
+
+---
+
+## ✦ How
+
+Drop in a CSV or XES, run one command:
+
+```bash
+gnn run my_log.csv          # full pipeline on a CSV event log
+gnn run my_log.xes.gz       # or XES — pm4py importer auto-routes
+```
+
+```mermaid
+flowchart LR
+  log[event log<br/>CSV · XES · XES.gz] --> P[preprocess<br/>encode · case-level split · scale]
+  P --> B[baselines<br/>most-common · 1st-order Markov]
+  P --> G[GAT<br/>causal edges + time head + temperature scaling]
+  P --> L[LSTM<br/>packed seqs + time head + temperature scaling]
+  P --> A[process mining<br/>bottlenecks · cycle · conformance F]
+  P --> C[spectral cluster<br/>normalized Laplacian]
+  P --> RL[ProcessEnv<br/>tabular Q-learning]
+  G --> R[results/run_&lt;ts&gt;/<br/>metrics · models · viz · policy]
+  L --> R
+  B --> R
+  A --> R
+  C --> R
+  RL --> R
+```
+
+Output is **one timestamped directory** per run with a `metrics/` tree of
+JSON (one per stage), `models/` (best-val checkpoints + calibration scalars),
+`visualizations/` (PNGs + an HTML Sankey), `analysis/` (process-mining
+outputs), and `policies/` (RL output).
+
+Each stage is also **independently runnable** when you only want one
+(`gnn analyze`, `gnn cluster`, `gnn baseline`, `gnn explain --case-id <id>`)
+and **individually skippable** when running the whole pipeline
+(`--skip-{gat,lstm,analyze,viz,cluster,rl}`). Two runs can be diffed with
+`gnn diff run_a/ run_b/`. Hyperparameters can be pinned in a
+[TOML config](#-cli) so reproducible experiments don't need 15-flag command
+lines.
+
+Three things this gets right by default that off-the-shelf process-mining
+notebooks routinely don't (full audit history under
+[Correctness commitments](#-correctness-commitments)):
+
+1. **Case-level train/val splits, never prefix-level.** No future-event
+   leakage. Verified by a load-bearing regression test
+   (`tests/test_models.py::test_prefixes_are_case_isolated`).
+2. **Calibrated probabilities.** Post-hoc temperature scaling is run by
+   default; ECE reported before and after.
+3. **Honest baselines.** Every model accuracy is paired with
+   `lift_over_markov` and `lift_over_most_common` so you can tell whether
+   the deep model is adding signal or just inheriting the distribution's
+   class imbalance.
+
+---
+
 ## ✦ Benchmarks
 
 > **TL;DR.** On the real-world **BPI 2020 Domestic Declarations** log (10,366
@@ -139,47 +219,6 @@ Don't want a Python env? Pull the image:
 ```bash
 docker run --rm -it ghcr.io/erphq/gnn:main gnn smoke
 ```
-
----
-
-## ✦ What `gnn` answers
-
-Drop in an event log. Every release is required to answer all six of
-these on the BPI 2020 sample without manual surgery:
-
-| Question | Command | What you get |
-|---|---|---|
-| 🚦 **Where are the bottlenecks?** | `gnn analyze log.csv` | Top transitions by mean wait time |
-| ⚠️  **Which cases are anomalous?** | `gnn analyze log.csv` | Cases above the 95th-percentile cycle time + rare paths |
-| 🔮 **What happens next in this case?** | `gnn run log.csv` | GAT + LSTM next-activity probabilities |
-| ✅ **Does reality match the model?** | `gnn analyze log.csv` | Per-trace conformance (inductive miner + token replay) |
-| 👤 **How should resources be allocated?** | `gnn run log.csv` | Q-learning policy over `(task, resource)` |
-| 🧬 **Are these activities really distinct?** | `gnn cluster log.csv -k 3` | Spectral clusters of the task adjacency |
-
----
-
-## ✦ How it works
-
-```mermaid
-flowchart LR
-    CSV[event log<br/>CSV / XES] --> P[preprocess<br/>encode · split · scale]
-    P --> G[per-case graph<br/>build PyG Data]
-    P --> S[per-case prefixes<br/>build padded LSTM data]
-    G --> GAT[GAT<br/>node-level next-task]
-    S --> LSTM[LSTM<br/>prefix → next activity]
-    P --> A[process mining<br/>bottlenecks · cycle · conformance]
-    P --> C[spectral cluster<br/>normalized Laplacian]
-    P --> RL[ProcessEnv<br/>tabular Q-learning]
-    GAT --> R[results/<br/>models · metrics · viz · policy]
-    LSTM --> R
-    A --> R
-    C --> R
-    RL --> R
-```
-
-Stages are independently runnable (`gnn analyze`, `gnn cluster`) and
-individually skippable (`--skip-{gat,lstm,analyze,viz,cluster,rl}`).
-Output is one timestamped directory per run.
 
 ---
 
