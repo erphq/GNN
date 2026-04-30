@@ -210,6 +210,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_sx.add_argument("--seed", type=int, default=42)
     p_sx.add_argument("--device", default=None)
 
+    p_wi = sub.add_parser(
+        "whatif",
+        help="Counterfactual rollout — swap a resource on a case and "
+             "predict the cycle-time delta from historical (transition, "
+             "resource) statistics.",
+    )
+    p_wi.add_argument("data_path")
+    p_wi.add_argument("--case-id", required=True)
+    p_wi.add_argument(
+        "--swap-resource", required=True,
+        help="Format: from=to (e.g. alice=bob).",
+    )
+    p_wi.add_argument("--out-dir", default="results")
+    p_wi.add_argument("--seed", type=int, default=42)
+
     p_sv = sub.add_parser(
         "serve",
         help="Start a FastAPI inference endpoint backed by a trained "
@@ -411,6 +426,42 @@ def cmd_predict_suffix(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_whatif(args: argparse.Namespace) -> int:
+    import json as _json
+
+    from gnn_cli.stages import setup_results_dir, stage_preprocess
+    from gnn_cli.whatif import predict_whatif, render_whatif_report
+
+    if not os.path.exists(args.data_path):
+        print(f"error: dataset not found: {args.data_path}", file=sys.stderr)
+        return EXIT_DATA
+    if "=" not in args.swap_resource:
+        print("error: --swap-resource must be 'from=to' (e.g. alice=bob)", file=sys.stderr)
+        return EXIT_USAGE
+    from_r, to_r = args.swap_resource.split("=", 1)
+
+    run_dir = setup_results_dir(args.out_dir)
+    print(f"Results will be saved in: {run_dir}")
+    df, _, _, le_task, _, _, _ = stage_preprocess(
+        args.data_path, val_frac=0.2, seed=args.seed
+    )
+
+    result = predict_whatif(df, args.case_id, (from_r, to_r), le_task=le_task)
+    report = render_whatif_report(result)
+    print(report)
+
+    out_dir = os.path.join(run_dir, "whatif")
+    os.makedirs(out_dir, exist_ok=True)
+    json_path = os.path.join(out_dir, f"whatif_{args.case_id}.json")
+    with open(json_path, "w") as f:
+        _json.dump(result, f, indent=2, default=str)
+    md_path = os.path.join(out_dir, f"whatif_{args.case_id}.md")
+    with open(md_path, "w") as f:
+        f.write(report)
+    print(f"Saved {json_path} and {md_path}")
+    return EXIT_OK
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     try:
         from gnn_cli.serve import serve
@@ -597,6 +648,7 @@ COMMANDS = {
     "baseline": cmd_baseline,
     "explain": cmd_explain,
     "predict-suffix": cmd_predict_suffix,
+    "whatif": cmd_whatif,
     "serve": cmd_serve,
     "diff": cmd_diff,
     "smoke": cmd_smoke,
