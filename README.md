@@ -405,7 +405,45 @@ gnn run input/BPI2020_DomesticDeclarations.csv \
 | `--rl-episodes`       | `30`      | Q-learning episodes                             |
 | `--clusters`          | `3`       | spectral cluster count `k`                      |
 | `--gat-graph-label`   | off       | use the legacy graph-level head (v0.2 reproducibility) |
-| `--skip-{stage}`      | —         | skip any of: `gat lstm analyze viz cluster rl`  |
+| `--gat-bidirectional` | off       | use legacy bidirectional event-graph edges (default is causal forward-only) |
+| `--predict-time`      | off       | add a regression head for time-to-next-event       |
+| `--time-loss-weight`  | `0.5`     | weight on the time-prediction loss term            |
+| `--time-quantiles`    | —         | comma-separated quantiles (e.g. `0.1,0.5,0.9`) for a quantile head with pinball loss; reports interval coverage + width |
+| `--no-calibrate`      | off       | skip post-hoc temperature scaling                  |
+| `--split-mode`        | `case`    | `case` (random) or `temporal` (last val_frac by start time) |
+| `--seq-arch`          | `lstm`    | `lstm` or `transformer` for the next-activity head |
+| `--use-resource`      | off       | parallel resource embedding into the LSTM input   |
+| `--use-temporal`      | off       | cyclic day/hour features into the LSTM input      |
+| `--compile`           | off       | apply `torch.compile` (PyTorch 2+) with graceful fallback |
+| `--config`            | —         | TOML file with run defaults; CLI flags override   |
+| `--skip-{stage}`      | —         | skip any of: `gat lstm analyze viz cluster rl`    |
+
+</details>
+
+<details>
+<summary><b>Beyond `gnn run` — the rest of the CLI surface</b></summary>
+
+```bash
+gnn baseline LOG.csv                    # null + Markov baseline only
+gnn explain  LOG.csv --case-id <id> --model best_gnn_model.pth
+gnn predict-suffix LOG.csv --case-id <id> --model lstm_next_activity.pth
+gnn whatif   LOG.csv --case-id <id> --swap-resource alice=bob
+gnn diff     run_a/ run_b/              # markdown delta between two runs
+gnn serve    LOG.csv --run-dir results/run_<ts>/   # FastAPI /predict endpoint
+```
+
+Multi-seed variance:
+
+```bash
+python bench/seeds.py \
+    --csv input/BPI2020_DomesticDeclarations.csv \
+    --seeds 42 43 44 45 46 \
+    --out-root bench/results/seed_sweep \
+    -- --epochs-lstm 30 --hidden-dim 256 --predict-time --skip-gat --skip-rl
+```
+
+Aggregates per-seed metrics into `mean ± std / min / max` so a reader
+can tell whether a 1pp difference is signal or noise.
 
 </details>
 
