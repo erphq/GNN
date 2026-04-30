@@ -250,6 +250,13 @@ Don't want a Python env? Pull the image:
 docker run --rm -it ghcr.io/erphq/gnn:main gnn smoke
 ```
 
+Want to see the whole story walked through on real data?
+**[`notebooks/01_bpi2020_tutorial.ipynb`](./notebooks/01_bpi2020_tutorial.ipynb)**
+runs the full pipeline on BPI 2020 — analyze, baseline, train, explain,
+predict-suffix, whatif, diff — in ~30 seconds when reading the
+published metrics, or ~30 minutes if you retrain end-to-end. The
+notebook is the canonical "did this thing actually work?" demo.
+
 ---
 
 ## ✦ Fast where it matters
