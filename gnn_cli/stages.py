@@ -19,6 +19,7 @@ from torch_geometric.loader import DataLoader
 
 from models.gat_model import (
     NextTaskGAT,
+    bootstrap_ci,
     evaluate_gat_model,
     expected_calibration_error,
     fit_temperature,
@@ -184,6 +185,7 @@ def stage_train_gat(
         "mrr": mean_reciprocal_rank(y_true, y_prob),
         "mcc": float(matthews_corrcoef(y_true, y_pred)),
     }
+    add_bootstrap_cis(metrics, y_true, y_pred, y_prob)
     metrics.update(per_class_metrics(y_true, y_pred, le_task.classes_))
     if baseline is not None:
         # Lift over Markov is what tells you if the GAT learned anything
@@ -304,6 +306,7 @@ def stage_train_lstm(
         "top_5_accuracy": top_k_accuracy(y_true_t, y_prob_t, 5),
         "mrr": mean_reciprocal_rank(y_true_t, y_prob_t),
     }
+    add_bootstrap_cis(lstm_metrics, y_true_lstm, preds, probs)
     class_names = (
         list(le_task.classes_) if le_task is not None
         else [str(i) for i in range(num_classes)]
@@ -345,6 +348,50 @@ def stage_train_lstm(
         )
 
     save_metrics(lstm_metrics, run_dir, "lstm_metrics.json")
+
+
+def add_bootstrap_cis(
+    metrics: dict, y_true, y_pred, y_prob,
+    n_resamples: int = 500,
+):
+    """Decorate a metrics dict in place with 95% bootstrap CIs.
+
+    Adds ``<metric>_ci_low`` and ``<metric>_ci_high`` for accuracy,
+    macro_f1, top_3_accuracy, top_5_accuracy, and mrr. Kept fast
+    (n_resamples=500) so it adds <1s on real-sized val sets — bumping
+    to 1000+ is fine for paper-grade reporting but rarely changes the
+    headline.
+    """
+    import numpy as np
+    from sklearn.metrics import accuracy_score, f1_score
+
+    yt_np = np.asarray(y_true)
+    yp_np = np.asarray(y_pred)
+    yprob_np = np.asarray(y_prob)
+    yt_t = torch.from_numpy(yt_np).long() if not isinstance(y_true, torch.Tensor) else y_true.long()
+    yprob_t = torch.from_numpy(yprob_np) if not isinstance(y_prob, torch.Tensor) else y_prob
+
+    # Pin the label set so macro_f1 averages over the same N classes on
+    # every resample (otherwise sklearn averages only over classes
+    # present in the resample, biasing CI upward when classes are rare).
+    num_classes = int(max(yprob_t.shape[1] if yprob_t.ndim == 2 else 0,
+                          int(yt_np.max()) + 1, int(yp_np.max()) + 1))
+    label_set = list(range(num_classes))
+
+    def _ci(name, fn, score):
+        lo, hi = bootstrap_ci(*score, fn, n_resamples=n_resamples)
+        metrics[f"{name}_ci_low"] = lo
+        metrics[f"{name}_ci_high"] = hi
+
+    _ci("accuracy", lambda y, p: accuracy_score(y, p), (yt_np, yp_np))
+    _ci(
+        "macro_f1",
+        lambda y, p: f1_score(y, p, average="macro", zero_division=0, labels=label_set),
+        (yt_np, yp_np),
+    )
+    _ci("top_3_accuracy", lambda y, p: top_k_accuracy(y, p, 3), (yt_t, yprob_t))
+    _ci("top_5_accuracy", lambda y, p: top_k_accuracy(y, p, 5), (yt_t, yprob_t))
+    _ci("mrr", mean_reciprocal_rank, (yt_t, yprob_t))
 
 
 def per_class_metrics(y_true, y_pred, class_names) -> dict:

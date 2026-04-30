@@ -286,6 +286,55 @@ def mean_reciprocal_rank(y_true, y_prob) -> float:
     return float((1.0 / rank.float()).mean().item())
 
 
+def bootstrap_ci(
+    y_true,
+    y_prob_or_pred,
+    metric_fn,
+    *,
+    n_resamples: int = 1000,
+    confidence: float = 0.95,
+    seed: int = 42,
+):
+    """Percentile bootstrap CI for any metric over (y_true, y_score) rows.
+
+    Resamples the val rows with replacement ``n_resamples`` times,
+    computes the metric on each resample, and returns the lower /
+    upper percentile bounds. ``y_prob_or_pred`` can be a 1-D tensor of
+    predicted classes or a 2-D tensor of class probabilities — passed
+    through to ``metric_fn(y_true_resampled, score_resampled)`` as-is.
+
+    Returns ``(lo, hi)``. The CI captures sampling variance only, not
+    model variance — to add model variance you'd retrain across seeds.
+    The point of this CI is to tell you whether two leaderboard rows
+    are *meaningfully* different or just within sampling noise.
+    """
+    import numpy as np
+
+    n = len(y_true)
+    if n == 0:
+        return (0.0, 0.0)
+    rng = np.random.default_rng(seed)
+    alpha = (1.0 - confidence) / 2.0
+    samples = []
+    is_2d = hasattr(y_prob_or_pred, "ndim") and y_prob_or_pred.ndim == 2
+    for _ in range(n_resamples):
+        idx = rng.integers(0, n, size=n)
+        if isinstance(y_true, torch.Tensor):
+            yt = y_true[idx]
+        else:
+            yt = y_true[idx]
+        if isinstance(y_prob_or_pred, torch.Tensor):
+            yp = y_prob_or_pred[idx]
+        elif is_2d:
+            yp = y_prob_or_pred[idx]
+        else:
+            yp = y_prob_or_pred[idx]
+        samples.append(float(metric_fn(yt, yp)))
+    lo = float(np.quantile(samples, alpha))
+    hi = float(np.quantile(samples, 1.0 - alpha))
+    return lo, hi
+
+
 def expected_calibration_error(y_true, y_prob, n_bins: int = 15) -> float:
     """ECE: weighted average of |bin_confidence - bin_accuracy| across
     equal-width confidence bins. 0 = perfectly calibrated.

@@ -318,3 +318,53 @@ def test_transformer_emb_dim_must_divide_heads():
 
     with pytest.raises(ValueError, match="divisible"):
         NextActivityTransformer(num_cls=4, emb_dim=10, num_heads=4)
+
+
+def test_bootstrap_ci_brackets_point_estimate():
+    """The 95% bootstrap CI must contain the point estimate."""
+    import numpy as np
+    from models.gat_model import bootstrap_ci
+
+    rng = np.random.default_rng(0)
+    n = 300
+    y_true = rng.integers(0, 4, size=n)
+    y_pred = y_true.copy()
+    y_pred[:60] = (y_pred[:60] + 1) % 4  # 80% accuracy
+
+    def acc(yt, yp):
+        return float((yt == yp).mean())
+
+    point = acc(y_true, y_pred)
+    lo, hi = bootstrap_ci(y_true, y_pred, acc, n_resamples=500, seed=0)
+    assert lo <= point <= hi
+    # CI should be tight (well below 0.10 wide on n=300, p=0.8).
+    assert hi - lo < 0.10
+
+
+def test_bootstrap_ci_widens_on_small_n():
+    """CI widens when val set shrinks — sampling variance grows."""
+    import numpy as np
+    from models.gat_model import bootstrap_ci
+
+    rng = np.random.default_rng(0)
+
+    def acc(yt, yp):
+        return float((yt == yp).mean())
+
+    # Small n.
+    n_small = 30
+    y = rng.integers(0, 4, size=n_small)
+    yp = y.copy()
+    yp[:6] = (yp[:6] + 1) % 4
+    lo_s, hi_s = bootstrap_ci(y, yp, acc, n_resamples=500, seed=0)
+    width_small = hi_s - lo_s
+
+    # Large n.
+    n_big = 3000
+    y = rng.integers(0, 4, size=n_big)
+    yp = y.copy()
+    yp[:600] = (yp[:600] + 1) % 4
+    lo_b, hi_b = bootstrap_ci(y, yp, acc, n_resamples=500, seed=0)
+    width_big = hi_b - lo_b
+
+    assert width_small > width_big * 3  # roughly sqrt(100) wider
