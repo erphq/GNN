@@ -129,12 +129,18 @@ when the named acceptance criterion holds.
   saliency, per-class P/R/F1, reference-metrics canary in CI, native
   `.xes` / `.xes.gz` ingest, Markov-chain smoke generator, TOML
   `--config` file, `gnn diff <run_a> <run_b>`.
-- **v0.5 — Multi-dataset benchmark.** BPI 2012 / 2017 / 2019 each have
-  a one-line invocation, a published metrics table, and a regression
-  test that flags drift > 1pp on next-activity accuracy.
-- **v0.6 — ONNX export.** `gnn export onnx <run_dir>` produces
-  inference artifacts that load in Rust / Java / browser without a
-  Python interpreter. Bridge for the next milestone.
+- **v0.5 — Multi-dataset benchmark (🟡 partial).** BPI 2012 / 2017 /
+  2019 each have a one-line invocation, a published metrics table,
+  and a regression test that flags drift > 1pp on next-activity
+  accuracy. *Status:* registry + downloader live
+  (`bench/datasets/`); parameterized drift regression test scaffold
+  is in (`tests/test_dataset_drift.py`); awaiting dataset pinning to
+  activate. The 4TU portal requires interactive TOS acceptance per
+  dataset, so this is a one-time manual step.
+- **v0.6 — ONNX export (✅ shipped).** `gnn export onnx <run_dir>`
+  produces inference artifacts that load in Rust / Java / browser
+  without a Python interpreter. ONNX Runtime round-trip is asserted
+  in `tests/test_export.py`.
 - **v0.7 — Rust orchestrator (prototype).** Single static binary that
   shells into Python for ML kernels but owns CLI parsing, config
   loading, scheduling, and artifact management. Same surface as
