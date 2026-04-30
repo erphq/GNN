@@ -1,0 +1,7 @@
+{
+    "most_common_label": 6,
+    "most_common_accuracy": 0.2321699544764795,
+    "markov_accuracy": 0.9195751138088012,
+    "markov_coverage": 1.0,
+    "num_val_events": 659
+}

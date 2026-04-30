@@ -1,0 +1,63 @@
+{
+    "accuracy": 0.08042488619119878,
+    "mcc": 0.0,
+    "per_class": {
+        "Approve": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 100
+        },
+        "Archive": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 100
+        },
+        "Notify": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 100
+        },
+        "Process": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 100
+        },
+        "Reject": {
+            "precision": 0.08042488619119878,
+            "recall": 1.0,
+            "f1": 0.14887640449438203,
+            "support": 53
+        },
+        "Resubmit": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 53
+        },
+        "Review": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 153
+        },
+        "Submit": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+        }
+    },
+    "macro_f1": 0.018609550561797753,
+    "weighted_f1": 0.01197336788801555,
+    "lift_over_markov": -0.8391502276176024,
+    "lift_over_most_common": -0.15174506828528073,
+    "dt_mae_hours": 0.5658126473426819,
+    "time_loss_weight": 0.5,
+    "temperature": 1.3455941677093506,
+    "ece_before_calibration": 0.07329083234071732,
+    "ece_after_calibration": 0.0704234316945076
+}

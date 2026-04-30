@@ -35,22 +35,72 @@ Built for the questions you actually ask: *where do cases get stuck?*,
 
 ---
 
-## ✦ Live demo
+## ✦ Benchmarks
 
-```text
-$ gnn smoke
-  ✓ data        80 cases · 624 events · 4 tasks
-  ✓ split       64 train · 16 val (case-isolated)
-  ✓ GAT         2 epochs · val_acc=0.81 · MCC=0.62
-  ✓ LSTM        2 epochs · val_acc=0.79
-  ✓ analyze     8 bottlenecks · 1 deviant trace · cycle95=14.3h
-  ✓ cluster     3 spectral groups
-  ✓ rl          policy over 12 states / 8 actions
-  → results/run_20260429_143000/
+The hard part of any process-mining model isn't beating random — it's beating
+the **1st-order Markov baseline** (current task → most-likely next task), which
+already captures most of the workflow structure in real industrial logs. Every
+release in this repo is required to either match or transparently fall short of
+that baseline; we report the gap, not just the absolute number.
+
+### Predictive performance
+
+| dataset | cases | tasks | most-common | **Markov** | **LSTM** acc / F1 / Δ Markov | LSTM ECE¹ | LSTM dt MAE² | GAT acc / F1 / Δ Markov |
+|---|---:|---:|---:|---:|---|---:|---:|---|
+| **BPI 2020 Domestic Declarations** (real industrial log, 24 mo span) | 10,366 | 17 | 22.0% | 85.4% | **81.4% / 0.27 / −3.9 pp** | **0.025** | 48.2 h | 66.0% / 0.29 / −19.4 pp |
+| Synthetic Markov chain (Approve/Reject branching, bounded loops) | 500 | 8 | 23.2% | 92.0% | **90.5% / 0.60 / −1.4 pp** | **0.037** | 0.43 h | collapsed³ |
+
+> **The headline.** The LSTM lands within **4 percentage points of the Markov
+> ceiling on both datasets**, with calibrated probabilities (ECE ≤ 0.04 after
+> temperature scaling) and time-to-next-event predictions in physical units.
+> Most published next-event-prediction numbers don't even tell you their Markov
+> baseline — that's how generous the field is to itself.
+
+¹ Expected Calibration Error after post-hoc temperature scaling, 15 bins. Lower is better; 0 is perfectly calibrated.
+² Mean absolute error of the time-to-next-event head, in hours, computed by inverting `expm1(log_seconds)` per-event.
+³ The GAT collapses to a single class on the synthetic generator (avg 6 events per case is too short for graph attention to extract structure the LSTM gets for free from sequence order). Tracked as a v0.5 follow-up.
+
+### Process-mining quality (PM4Py inductive miner + token replay)
+
+| dataset | fitness | precision | F-score |
+|---|---:|---:|---:|
+| BPI 2020 Domestic Declarations | 1.000 | 0.247 | 0.396 |
+| Synthetic Markov (500 cases) | 1.000 | 0.997 | 0.998 |
+
+The BPI 2020 row is the **flower-model warning** the v0.4 audit was built to
+surface: `fitness=1.0` (every event is reproducible by the discovered model)
+combined with `precision=0.247` (the model also allows a lot of behavior the
+log never showed) means the model fits everything because it permits
+everything. The previous "deviant trace count" (0 / 10,366) alone called this
+green; F-score 0.40 calls it what it is.
+
+### Reproduce
+
+```bash
+# BPI 2020 row (Apple Silicon: ~6 min on MPS, ~25 min on CPU)
+gnn run input/BPI2020_DomesticDeclarations.csv \
+    --seed 42 --device cpu \
+    --epochs-gat 20 --epochs-lstm 10 \
+    --hidden-dim 128 --gat-heads 8 \
+    --predict-time --skip-rl
+
+# Synthetic row
+gnn smoke --num-cases 500 --seed 42 --device cpu \
+    --epochs-gat 60 --epochs-lstm 20 \
+    --hidden-dim 64 --gat-heads 4 \
+    --predict-time --skip-rl
 ```
 
-That's the same `gnn smoke` command new contributors run before opening a
-PR. Synthetic data, full pipeline, no internet, no GPU, ~60 seconds.
+Each command writes a full metrics tree under `results/run_<timestamp>/`. To
+compare two runs (e.g. before/after a change), use `gnn diff run_a/ run_b/`.
+The exact JSON files behind the tables above are committed under
+[`bench/published/`](./bench/published/) (model weights and visualizations are
+kept out of git; run the commands locally to regenerate).
+
+> **What's next on the leaderboard.** GAT under-converges on the current
+> hyperparameter grid — adding more epochs and a node-classification-style
+> warmup is the [v0.5 milestone](./GOALS.md). Multi-dataset coverage (BPI 2012,
+> 2017, 2019; Hospital Sepsis) is on the same milestone.
 
 ---
 
