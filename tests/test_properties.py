@@ -131,3 +131,95 @@ def test_build_graph_preserves_event_count(n_cases, events_per_case, seed):
         assert g.x.shape[0] == len(sub)
         # `y` is per-node next_task; same length as x.
         assert g.y.shape[0] == g.x.shape[0]
+
+
+# ---- Model-layer invariants ---------------------------------------
+
+@given(
+    n=st.integers(min_value=2, max_value=20),
+    k=st.integers(min_value=2, max_value=8),
+)
+@settings(max_examples=20, deadline=2000, suppress_health_check=[HealthCheck.too_slow])
+def test_top_k_accuracy_is_monotone_in_k(n, k):
+    """Top-K accuracy must be non-decreasing in K."""
+    import torch
+    from models.gat_model import top_k_accuracy
+
+    rng = np.random.default_rng(0)
+    y_true = torch.from_numpy(rng.integers(0, k, size=n)).long()
+    y_prob = torch.from_numpy(rng.random((n, k)).astype("float32"))
+    last = 0.0
+    for kk in range(1, k + 1):
+        v = top_k_accuracy(y_true, y_prob, kk)
+        assert v >= last - 1e-9, f"top-{kk}={v} < top-{kk-1}={last}"
+        assert 0.0 <= v <= 1.0
+        last = v
+
+
+@given(seed=st.integers(min_value=0, max_value=2_000))
+@settings(max_examples=15, deadline=2000, suppress_health_check=[HealthCheck.too_slow])
+def test_temperature_scaling_is_argmax_invariant(seed):
+    """Dividing logits by any T > 0 cannot change argmax.
+
+    This is the load-bearing invariant of post-hoc calibration: T
+    rescales the probability simplex but preserves order. If a future
+    refactor breaks this, calibration silently changes predictions.
+    """
+    import torch
+
+    rng = np.random.default_rng(seed)
+    n, k = 50, 6
+    logits = torch.from_numpy(rng.standard_normal((n, k)).astype("float32"))
+    base = logits.argmax(dim=1)
+    for T in (0.1, 0.5, 1.0, 2.0, 10.0, 100.0):
+        scaled = (logits / T).argmax(dim=1)
+        assert torch.equal(base, scaled), f"argmax shifted at T={T}"
+
+
+@given(seed=st.integers(min_value=0, max_value=2_000))
+@settings(max_examples=15, deadline=2000, suppress_health_check=[HealthCheck.too_slow])
+def test_ece_is_in_unit_interval(seed):
+    """Expected calibration error is bounded to [0, 1]."""
+    import torch
+    from models.gat_model import expected_calibration_error
+
+    rng = np.random.default_rng(seed)
+    n, k = 100, 4
+    y_true = torch.from_numpy(rng.integers(0, k, size=n)).long()
+    raw = rng.standard_normal((n, k))
+    probs = torch.from_numpy(np.exp(raw) / np.exp(raw).sum(axis=1, keepdims=True))
+    ece = expected_calibration_error(y_true, probs.float())
+    assert 0.0 <= ece <= 1.0
+
+
+@given(
+    n=st.integers(min_value=4, max_value=20),
+    case_count=st.integers(min_value=2, max_value=6),
+)
+@settings(max_examples=10, deadline=4000, suppress_health_check=[HealthCheck.too_slow])
+def test_lstm_forward_shape_invariance(n, case_count):
+    """LSTM output has shape (batch, num_cls) regardless of which optional
+    feature flags are on. Locks the API contract that lets serve.py /
+    predict_suffix call ``out[0]`` without branching on model variant."""
+    import torch
+    from models.lstm_model import NextActivityLSTM
+
+    num_cls = 5
+    # Synthetic padded prefix tensor.
+    seq_len = torch.full((case_count,), n, dtype=torch.long)
+    x = torch.randint(low=1, high=num_cls + 1, size=(case_count, n))
+
+    # Just task IDs.
+    m = NextActivityLSTM(num_cls=num_cls, emb_dim=8, hidden_dim=8)
+    out = m(x, seq_len)
+    assert out.shape == (case_count, num_cls)
+
+    # With resource + temporal features.
+    x_resource = torch.randint(low=1, high=4, size=(case_count, n))
+    x_continuous = torch.randn(case_count, n, 4)
+    m2 = NextActivityLSTM(
+        num_cls=num_cls, emb_dim=8, hidden_dim=8,
+        num_resources=3, n_continuous_dims=4,
+    )
+    out2 = m2(x, seq_len, x_resources=x_resource, x_continuous=x_continuous)
+    assert out2.shape == (case_count, num_cls)
