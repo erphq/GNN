@@ -267,23 +267,41 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ex2 = sub.add_parser(
         "export",
-        help="Serialize a trained model to a portable inference format. "
-             "Today: ONNX. Bridge to inference outside Python (Rust, "
-             "Java, browser, ONNX Runtime).",
+        help="Serialize / verify trained models for inference outside "
+             "Python. Actions: `onnx` (export), `verify` (compare "
+             "PyTorch vs ONNX Runtime on a held-out batch).",
     )
     p_ex2.add_argument(
-        "format",
-        choices=("onnx",),
-        help="Output format. Currently `onnx` is the only target.",
+        "action",
+        choices=("onnx", "verify"),
+        help="`onnx` exports to .onnx; `verify` runs the round-trip "
+             "drift check on a held-out batch from a CSV/XES log.",
     )
     p_ex2.add_argument("run_dir", help="Path to a results/run_<timestamp>/ dir.")
     p_ex2.add_argument(
         "--out", default=None,
-        help="Output path. Defaults to <run_dir>/models/<arch>.onnx.",
+        help="onnx: output path (defaults to <run_dir>/models/<arch>.onnx). "
+             "verify: optional path to write the markdown report.",
     )
     p_ex2.add_argument("--opset", type=int, default=17)
     p_ex2.add_argument("--device", default="cpu",
                        help="Trace device (cpu / cuda / mps).")
+    p_ex2.add_argument(
+        "--csv", default=None,
+        help="(verify) path to event-log CSV/XES — same one used for "
+             "training. Required for verify; the val split is "
+             "reproduced from it deterministically.",
+    )
+    p_ex2.add_argument(
+        "--onnx-path", default=None,
+        help="(verify) explicit ONNX file path. Defaults to "
+             "<run_dir>/models/<arch>.onnx.",
+    )
+    p_ex2.add_argument(
+        "--sample-size", type=int, default=256,
+        help="(verify) number of val samples to run through both "
+             "PyTorch and ONNX Runtime.",
+    )
 
     p_sv = sub.add_parser(
         "serve",
@@ -524,16 +542,49 @@ def cmd_whatif(args: argparse.Namespace) -> int:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    from gnn_cli.export import export_to_onnx
     from pathlib import Path as _P
+
+    from gnn_cli.export import (
+        export_to_onnx,
+        render_verify_report,
+        verify_onnx_against_torch,
+    )
 
     run_dir = _P(args.run_dir)
     if not run_dir.exists():
         print(f"error: run dir not found: {run_dir}", file=sys.stderr)
         return EXIT_DATA
 
+    if args.action == "verify":
+        if not args.csv:
+            print(
+                "error: --csv is required for verify "
+                "(reconstructs the val split deterministically)",
+                file=sys.stderr,
+            )
+            return EXIT_USAGE
+        if not _P(args.csv).exists():
+            print(f"error: csv not found: {args.csv}", file=sys.stderr)
+            return EXIT_DATA
+        try:
+            summary = verify_onnx_against_torch(
+                run_dir, args.csv,
+                onnx_path=args.onnx_path,
+                sample_size=args.sample_size,
+                device=args.device,
+            )
+        except FileNotFoundError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return EXIT_DATA
+        report = render_verify_report(summary)
+        print(report)
+        if args.out:
+            _P(args.out).write_text(report)
+            print(f"Saved {args.out}")
+        return EXIT_OK if summary["ok"] else EXIT_RUNTIME
+
+    # action == "onnx" — export.
     if args.out is None:
-        # Default location: alongside the .pth file.
         models_dir = run_dir / "models"
         out_path = (
             models_dir / "transformer.onnx"

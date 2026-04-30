@@ -152,3 +152,52 @@ def test_export_missing_metadata_errors_clearly(tmp_path):
     (fake_run / "models").mkdir(parents=True)
     with pytest.raises(FileNotFoundError, match="arch.json"):
         export_to_onnx(str(fake_run), str(tmp_path / "out.onnx"))
+
+
+def test_verify_passes_on_real_data(trained_run: Path, tmp_path: Path, csv_path):
+    """Round-trip drift on the val split should be within tolerance."""
+    pytest.importorskip("onnxruntime")
+
+    from gnn_cli.export import (
+        export_to_onnx,
+        verify_onnx_against_torch,
+    )
+
+    out = trained_run / "models" / "lstm.onnx"
+    export_to_onnx(str(trained_run), str(out))
+
+    summary = verify_onnx_against_torch(
+        str(trained_run), csv_path, onnx_path=str(out),
+        sample_size=32, seed=42, device="cpu",
+    )
+    assert summary["ok"], f"verify failed: {summary}"
+    for name, stats in summary["outputs"].items():
+        # Real-data tolerance is 1e-3 (looser than dummy-input 1e-4).
+        assert stats["max_abs_diff"] <= stats["tolerance"], (
+            f"{name}: max diff {stats['max_abs_diff']} > tol {stats['tolerance']}"
+        )
+
+
+def test_verify_cli_action(trained_run: Path, csv_path):
+    """`gnn export verify <run> --csv ...` exits 0 when within tolerance."""
+    pytest.importorskip("onnxruntime")
+
+    # Export first.
+    from gnn_cli.export import export_to_onnx
+    export_to_onnx(str(trained_run), str(trained_run / "models" / "lstm.onnx"))
+
+    cmd = [
+        sys.executable, "-m", "gnn_cli", "export", "verify", str(trained_run),
+        "--csv", str(csv_path), "--sample-size", "16",
+    ]
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(REPO) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+    }
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=180, env=env,
+    )
+    assert result.returncode == 0, (
+        f"verify failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "OK" in result.stdout
