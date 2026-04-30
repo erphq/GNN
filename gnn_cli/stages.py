@@ -97,6 +97,11 @@ class RunConfig:
     use_resource: bool = False
     use_temporal: bool = False
     use_dt_input: bool = False
+    # When non-empty, the LSTM time head emits one log-seconds prediction
+    # per quantile and is trained with pinball loss. Only meaningful when
+    # gat_predict_time (which the LSTM aliases for its own time head) is
+    # also True. Default (empty) keeps the legacy single-value MSE head.
+    time_quantiles: tuple[float, ...] = ()
 
     skip_gat: bool = False
     skip_lstm: bool = False
@@ -340,6 +345,7 @@ def stage_train_lstm(
             predict_time=cfg.gat_predict_time,
             num_resources=num_resources,
             n_continuous_dims=len(cont_cols),
+            time_quantiles=tuple(cfg.time_quantiles) or None,
         ).to(device)
     model = maybe_compile(
         model, enabled=cfg.compile_models, name=f"seq:{cfg.seq_arch}",
@@ -394,6 +400,14 @@ def stage_train_lstm(
             getattr(model, "last_dt_mae_hours", float("nan"))
         )
         lstm_metrics["time_loss_weight"] = float(cfg.time_loss_weight)
+        if cfg.time_quantiles:
+            lstm_metrics["time_quantiles"] = list(cfg.time_quantiles)
+            lstm_metrics["dt_coverage"] = float(
+                getattr(model, "last_dt_coverage", float("nan"))
+            )
+            lstm_metrics["dt_interval_width_hours"] = float(
+                getattr(model, "last_dt_interval_width_hours", float("nan"))
+            )
 
     if cfg.calibrate:
         ece_before = expected_calibration_error(

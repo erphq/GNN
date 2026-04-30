@@ -75,7 +75,17 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
         "--time-loss-weight",
         type=float,
         default=0.5,
-        help="Weight on the time-prediction MSE term when --predict-time is set.",
+        help="Weight on the time-prediction loss term when --predict-time is set.",
+    )
+    p.add_argument(
+        "--time-quantiles",
+        type=str,
+        default="",
+        help="Comma-separated quantiles (e.g. '0.1,0.5,0.9') to fit a "
+             "quantile head on the time-to-next-event target instead of "
+             "the default MSE point estimate. Reports interval coverage "
+             "and width alongside median MAE. Only effective with "
+             "--predict-time.",
     )
     p.add_argument(
         "--no-calibrate",
@@ -161,6 +171,9 @@ def _cfg_from_args(args: argparse.Namespace):
         gat_causal=not args.gat_bidirectional,
         gat_predict_time=args.predict_time,
         time_loss_weight=args.time_loss_weight,
+        time_quantiles=tuple(
+            float(q) for q in args.time_quantiles.split(",") if q.strip()
+        ),
         calibrate=not args.no_calibrate,
         split_mode=args.split_mode,
         seq_arch=args.seq_arch,

@@ -386,3 +386,65 @@ def test_maybe_compile_enabled_returns_a_callable():
     out = maybe_compile(m, enabled=True)
     # Either the OptimizedModule or the original — both must be callable.
     assert callable(out)
+
+
+def test_lstm_time_quantiles_emit_K_outputs(synthetic_event_log):
+    """time_quantiles=(0.1, 0.5, 0.9) → dt_pred shape (batch, 3)."""
+    from modules.data_preprocessing import encode_categoricals
+    from models.lstm_model import (
+        NextActivityLSTM, make_padded_dataset, prepare_sequence_data,
+    )
+
+    df, le_task, _ = encode_categoricals(synthetic_event_log)
+    train_seq, _ = prepare_sequence_data(df, val_frac=0.2, seed=0)
+    Xp, Xl, y, _ = make_padded_dataset(train_seq, num_cls=len(le_task.classes_))
+    model = NextActivityLSTM(
+        num_cls=len(le_task.classes_), emb_dim=8, hidden_dim=8,
+        predict_time=True, time_quantiles=(0.1, 0.5, 0.9),
+    )
+    out = model(Xp[:4], Xl[:4])
+    assert isinstance(out, tuple) and len(out) == 2
+    logits, dt_pred = out
+    assert dt_pred.shape == (4, 3), f"expected (4, 3), got {dt_pred.shape}"
+
+
+def test_lstm_quantile_constructor_validation():
+    from models.lstm_model import NextActivityLSTM
+    import pytest as _pt
+
+    with _pt.raises(ValueError, match="must be in"):
+        NextActivityLSTM(num_cls=4, predict_time=True, time_quantiles=(0.1, 1.5))
+
+    with _pt.raises(ValueError, match="unique"):
+        NextActivityLSTM(num_cls=4, predict_time=True, time_quantiles=(0.5, 0.5))
+
+
+def test_pinball_loss_recovers_target_at_median():
+    """If predictions equal targets, pinball loss is 0 regardless of quantiles."""
+    import torch as _t
+    from models.lstm_model import _pinball_loss
+
+    target = _t.tensor([1.0, 2.0, 3.0])
+    pred = _t.stack([target] * 3, dim=1)  # (3, 3) — every quantile = target
+    loss = _pinball_loss(pred, target, (0.1, 0.5, 0.9))
+    assert loss.item() == 0.0
+
+
+def test_pinball_loss_asymmetric_for_low_high_quantiles():
+    """Over-prediction is penalized differently for low vs high quantiles.
+    For q=0.1, predicting too HIGH should hurt more than too LOW (10th
+    percentile target). For q=0.9, the asymmetry reverses."""
+    import torch as _t
+    from models.lstm_model import _pinball_loss
+
+    target = _t.tensor([0.0])
+    high_pred = _t.tensor([[1.0]])  # over-predict
+    low_pred = _t.tensor([[-1.0]])  # under-predict
+
+    loss_high_q01 = _pinball_loss(high_pred, target, (0.1,)).item()
+    loss_low_q01 = _pinball_loss(low_pred, target, (0.1,)).item()
+    assert loss_high_q01 > loss_low_q01  # 10th: under-prediction OK
+
+    loss_high_q09 = _pinball_loss(high_pred, target, (0.9,)).item()
+    loss_low_q09 = _pinball_loss(low_pred, target, (0.9,)).item()
+    assert loss_low_q09 > loss_high_q09  # 90th: over-prediction OK

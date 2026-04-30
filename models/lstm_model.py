@@ -48,11 +48,27 @@ class NextActivityLSTM(nn.Module):
         predict_time: bool = False,
         num_resources: int | None = None,
         n_continuous_dims: int = 0,
+        time_quantiles: tuple[float, ...] | None = None,
     ):
         super().__init__()
         self.predict_time = predict_time
         self.use_resource = num_resources is not None
         self.n_continuous_dims = n_continuous_dims
+        # When ``time_quantiles`` is set (e.g. (0.1, 0.5, 0.9)) the time
+        # head emits one log-seconds prediction per quantile and is
+        # trained with pinball loss instead of MSE. dt_pred shape is
+        # ``(N, K)`` instead of ``(N,)`` — eval reports MAE on the median
+        # quantile and ``coverage`` (fraction of true values inside the
+        # outer interval).
+        if time_quantiles is not None:
+            qs = tuple(float(q) for q in time_quantiles)
+            if not all(0.0 < q < 1.0 for q in qs):
+                raise ValueError(f"all quantiles must be in (0, 1), got {qs}")
+            if len(qs) != len(set(qs)):
+                raise ValueError(f"quantiles must be unique, got {qs}")
+            self.time_quantiles: tuple[float, ...] | None = tuple(sorted(qs))
+        else:
+            self.time_quantiles = None
         self.emb = nn.Embedding(num_cls + 1, emb_dim, padding_idx=0)
         if self.use_resource:
             self.resource_emb = nn.Embedding(num_resources + 1, emb_dim, padding_idx=0)
@@ -64,7 +80,10 @@ class NextActivityLSTM(nn.Module):
         self.lstm = nn.LSTM(lstm_in, hidden_dim, num_layers=num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, num_cls)
         if predict_time:
-            self.dt_head = nn.Linear(hidden_dim, 1)
+            n_dt_out = (
+                len(self.time_quantiles) if self.time_quantiles is not None else 1
+            )
+            self.dt_head = nn.Linear(hidden_dim, n_dt_out)
 
     def forward(
         self, x, seq_len,
@@ -98,8 +117,12 @@ class NextActivityLSTM(nn.Module):
         last_hidden = last_hidden[unperm_idx]
         logits = self.fc(last_hidden)
         if self.predict_time:
-            dt_pred = self.dt_head(last_hidden).squeeze(-1)
-            return logits, dt_pred
+            dt_raw = self.dt_head(last_hidden)
+            if self.time_quantiles is not None:
+                # Shape (N, K). Don't squeeze — caller distinguishes via
+                # model.time_quantiles.
+                return logits, dt_raw
+            return logits, dt_raw.squeeze(-1)
         return logits
 
 
@@ -233,6 +256,29 @@ def make_padded_dataset(sample_list, num_cls):
     )
 
 
+def _pinball_loss(
+    pred_quantiles: torch.Tensor,
+    target: torch.Tensor,
+    quantiles: tuple[float, ...],
+) -> torch.Tensor:
+    """Quantile (pinball) loss averaged across K quantiles.
+
+    For each quantile q with predicted value q_pred, the per-row loss
+    is ``max(q * (target - q_pred), (q - 1) * (target - q_pred))`` —
+    asymmetric L1 that converges to the q-th quantile of P(target | x).
+
+    pred_quantiles: ``(N, K)``; target: ``(N,)``; quantiles: tuple of K
+    floats in (0, 1). Returns a scalar mean over rows + quantiles.
+    """
+    target = target.unsqueeze(-1)  # (N, 1) for broadcast
+    q_tensor = torch.tensor(
+        quantiles, dtype=pred_quantiles.dtype, device=pred_quantiles.device
+    )
+    err = target - pred_quantiles  # (N, K)
+    loss = torch.maximum(q_tensor * err, (q_tensor - 1) * err)
+    return loss.mean()
+
+
 def train_lstm_model(
     model,
     X_train_pad,
@@ -293,9 +339,12 @@ def train_lstm_model(
             if predict_time:
                 logits, dt_pred = out
                 bdt = dt_targets[idx].to(device)
-                lval = loss_fn(logits, by) + time_loss_weight * nn.functional.mse_loss(
-                    dt_pred, bdt
-                )
+                quantiles = getattr(model, "time_quantiles", None)
+                if quantiles is not None:
+                    time_loss = _pinball_loss(dt_pred, bdt, quantiles)
+                else:
+                    time_loss = nn.functional.mse_loss(dt_pred, bdt)
+                lval = loss_fn(logits, by) + time_loss_weight * time_loss
             else:
                 lval = loss_fn(out, by)
             lval.backward()
@@ -365,9 +414,32 @@ def evaluate_lstm_model(
     preds = np.argmax(logits_arr, axis=1)
 
     if predict_time and dt_pred_list:
-        pred = np.expm1(np.concatenate(dt_pred_list))
-        true = np.expm1(dt_targets.cpu().numpy())
-        model.last_dt_mae_hours = float(np.mean(np.abs(pred - true)) / 3600.0)
+        true_log = dt_targets.cpu().numpy()
+        true_h = np.expm1(true_log) / 3600.0
+        quantiles = getattr(model, "time_quantiles", None)
+        if quantiles is not None:
+            # Stack quantile predictions: shape (N, K).
+            preds_q_log = np.concatenate(dt_pred_list, axis=0)
+            preds_q_h = np.expm1(preds_q_log) / 3600.0
+            # Use the median quantile (closest to 0.5) for MAE.
+            median_idx = int(
+                np.argmin(np.abs(np.array(quantiles) - 0.5))
+            )
+            median_h = preds_q_h[:, median_idx]
+            model.last_dt_mae_hours = float(np.mean(np.abs(median_h - true_h)))
+            # Coverage: fraction of true values inside the [first,last]
+            # quantile interval (the outer pair after sorting). For
+            # quantiles (0.1, 0.5, 0.9) that's the 80% interval.
+            lo = preds_q_h[:, 0]
+            hi = preds_q_h[:, -1]
+            coverage = float(np.mean((true_h >= lo) & (true_h <= hi)))
+            model.last_dt_coverage = coverage
+            # Mean width of the interval (in hours) — useful as a
+            # "honest sharpness" metric paired with coverage.
+            model.last_dt_interval_width_hours = float(np.mean(hi - lo))
+        else:
+            preds_h = np.expm1(np.concatenate(dt_pred_list)) / 3600.0
+            model.last_dt_mae_hours = float(np.mean(np.abs(preds_h - true_h)))
 
     return preds, probs
 
