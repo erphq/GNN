@@ -210,6 +210,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_sx.add_argument("--seed", type=int, default=42)
     p_sx.add_argument("--device", default=None)
 
+    p_sv = sub.add_parser(
+        "serve",
+        help="Start a FastAPI inference endpoint backed by a trained "
+             "sequence model. Exposes POST /predict and POST /predict_suffix.",
+    )
+    p_sv.add_argument("data_path", help="Path to the same CSV/XES used for training.")
+    p_sv.add_argument("--run-dir", required=True,
+                      help="Path to a results/run_<timestamp>/ directory.")
+    p_sv.add_argument("--host", default="127.0.0.1")
+    p_sv.add_argument("--port", type=int, default=8000)
+    p_sv.add_argument("--seq-arch", choices=("lstm", "transformer"), default="lstm")
+    p_sv.add_argument("--hidden-dim", type=int, default=64)
+    p_sv.add_argument("--predict-time", action="store_true")
+    p_sv.add_argument("--seed", type=int, default=42)
+
     p_df = sub.add_parser(
         "diff",
         help="Compare two run directories' metrics and emit a markdown report.",
@@ -396,6 +411,33 @@ def cmd_predict_suffix(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    try:
+        from gnn_cli.serve import serve
+    except ImportError as e:
+        print(
+            f"error: serve dependencies not installed ({e}). "
+            f"Run `pip install fastapi uvicorn` and retry.",
+            file=sys.stderr,
+        )
+        return EXIT_RUNTIME
+
+    if not os.path.exists(args.data_path):
+        print(f"error: dataset not found: {args.data_path}", file=sys.stderr)
+        return EXIT_DATA
+    if not os.path.exists(args.run_dir):
+        print(f"error: run dir not found: {args.run_dir}", file=sys.stderr)
+        return EXIT_DATA
+
+    serve(
+        run_dir=args.run_dir, data_path=args.data_path,
+        host=args.host, port=args.port,
+        seq_arch=args.seq_arch, hidden_dim=args.hidden_dim,
+        predict_time=args.predict_time, seed=args.seed,
+    )
+    return EXIT_OK
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     from gnn_cli.diff import write_diff
 
@@ -555,6 +597,7 @@ COMMANDS = {
     "baseline": cmd_baseline,
     "explain": cmd_explain,
     "predict-suffix": cmd_predict_suffix,
+    "serve": cmd_serve,
     "diff": cmd_diff,
     "smoke": cmd_smoke,
     "version": cmd_version,
