@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Optional
 
 import matplotlib
 
@@ -80,7 +79,7 @@ def explain_case(
         mask = edge_index_last[1] == i
         srcs = edge_index_last[0][mask].tolist()
         weights = alpha_mean[mask.numpy()].tolist()
-        attended = sorted(zip(srcs, weights), key=lambda kv: -kv[1])
+        attended = sorted(zip(srcs, weights, strict=True), key=lambda kv: -kv[1])
 
         true_next = int(g.y[i].item())
         pred_next = int(preds[i])
@@ -120,7 +119,8 @@ def explain_case(
     n = len(g.x)
     heat = np.zeros((n, n), dtype=np.float32)
     for src, tgt, w in zip(
-        edge_index_last[0].tolist(), edge_index_last[1].tolist(), alpha_mean.tolist()
+        edge_index_last[0].tolist(), edge_index_last[1].tolist(), alpha_mean.tolist(),
+        strict=True,
     ):
         heat[tgt, src] = w
 
@@ -149,7 +149,7 @@ def load_or_train_gat(
     val_df,
     le_task,
     device,
-    model_path: Optional[str],
+    model_path: str | None,
     cfg,
 ) -> NextTaskGAT:
     """Either load weights from disk or train a quick GAT for explanation.

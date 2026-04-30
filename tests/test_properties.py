@@ -127,7 +127,7 @@ def test_build_graph_preserves_event_count(n_cases, events_per_case, seed):
     graphs = build_graph_data(df)
     cases = list(df.groupby("case_id"))
     assert len(graphs) == len(cases)
-    for g, (_, sub) in zip(graphs, cases):
+    for g, (_, sub) in zip(graphs, cases, strict=True):
         assert g.x.shape[0] == len(sub)
         # `y` is per-node next_task; same length as x.
         assert g.y.shape[0] == g.x.shape[0]

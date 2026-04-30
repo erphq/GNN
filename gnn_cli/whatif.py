@@ -32,9 +32,7 @@ Limitations
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
 
-import numpy as np
 import pandas as pd
 
 
@@ -76,10 +74,10 @@ def _transition_wait_fallback(df: pd.DataFrame) -> pd.DataFrame:
 def predict_whatif(
     df: pd.DataFrame,
     case_id: str,
-    swap: Tuple[str, str],
+    swap: tuple[str, str],
     *,
     le_task=None,
-) -> Dict:
+) -> dict:
     """For each transition in ``case_id``, predict the counterfactual
     wait under ``swap=(from_resource, to_resource)``.
 
@@ -159,7 +157,7 @@ def predict_whatif(
     }
 
 
-def render_whatif_report(result: Dict) -> str:
+def render_whatif_report(result: dict) -> str:
     """Render the counterfactual analysis as a markdown table."""
     lines = [
         f"### Counterfactual: case `{result['case_id']}`, "

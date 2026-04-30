@@ -18,7 +18,7 @@ import os
 import sys
 import tempfile
 import traceback
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from gnn_cli import __version__
 
@@ -382,10 +382,11 @@ def cmd_predict_suffix(args: argparse.Namespace) -> int:
     full_prefix = case_df["task_id"].astype(int).tolist()
     prefix = full_prefix[: args.prefix_len] if args.prefix_len else full_prefix
     if not prefix:
-        print(f"error: prefix is empty after truncation", file=sys.stderr)
+        print("error: prefix is empty after truncation", file=sys.stderr)
         return EXIT_USAGE
 
     num_classes = len(le_task.classes_)
+    model: _torch.nn.Module
     if args.seq_arch == "transformer":
         model = NextActivityTransformer(
             num_classes, emb_dim=args.hidden_dim, hidden_dim=args.hidden_dim,
@@ -618,17 +619,18 @@ def cmd_cluster(args: argparse.Namespace) -> int:
 
 
 def cmd_smoke(args: argparse.Namespace) -> int:
+    import contextlib
+
     from gnn_cli.smoke import generate_synthetic_csv
     from gnn_cli.stages import run_full_pipeline
 
     if args.keep_data:
         data_path = os.path.join(args.out_dir, "smoke_data.csv")
     else:
-        tmp = tempfile.NamedTemporaryFile(
-            prefix="gnn_smoke_", suffix=".csv", delete=False
-        )
-        tmp.close()
-        data_path = tmp.name
+        with tempfile.NamedTemporaryFile(
+            prefix="gnn_smoke_", suffix=".csv", delete=False,
+        ) as tmp:
+            data_path = tmp.name
 
     generate_synthetic_csv(data_path, num_cases=args.num_cases, seed=args.seed)
     print(f"Generated synthetic event log: {data_path} ({args.num_cases} cases)")
@@ -638,10 +640,8 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         run_full_pipeline(data_path, cfg)
     finally:
         if not args.keep_data:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(data_path)
-            except OSError:
-                pass
     return EXIT_OK
 
 
@@ -674,15 +674,15 @@ def _load_toml_run_config(path: str) -> dict:
     found" later from the file open above.
     """
     try:
-        import tomllib  # py 3.11+
+        import tomllib as _toml  # py 3.11+
     except ModuleNotFoundError:  # pragma: no cover
-        import tomli as tomllib  # type: ignore[import-not-found]
+        import tomli as _toml  # noqa: F401  # type: ignore[import-not-found]
     with open(path, "rb") as f:
-        data = tomllib.load(f)
+        data = _toml.load(f)
     return data.get("run", data)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
 
     # Two-pass parse so a TOML --config can supply defaults that CLI
@@ -700,7 +700,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return EXIT_DATA
         # Walk every subparser and apply matching defaults; argparse
         # quietly ignores unknown keys when set on the wrong subparser.
-        for action in parser._subparsers._group_actions[0].choices.values():
+        for action in parser._subparsers._group_actions[0].choices.values():  # type: ignore[attr-defined]
             action.set_defaults(**{
                 k: v for k, v in overrides.items()
                 if any(a.dest == k for a in action._actions)

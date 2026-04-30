@@ -12,7 +12,6 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Tuple
 
 import torch
 from torch_geometric.loader import DataLoader
@@ -72,7 +71,7 @@ class RunConfig:
 
     out_dir: str = "results"
     seed: int = 42
-    device: Optional[str] = None
+    device: str | None = None
     val_frac: float = 0.2
     batch_size_gat: int = 32
     batch_size_lstm: int = 64
@@ -103,7 +102,7 @@ class RunConfig:
     skip_cluster: bool = False
     skip_rl: bool = False
 
-    rl_resources: Tuple[int, ...] = field(default_factory=lambda: (0, 1))
+    rl_resources: tuple[int, ...] = field(default_factory=lambda: (0, 1))
 
 
 def setup_results_dir(out_root: str) -> str:
@@ -171,7 +170,7 @@ def stage_preprocess(
 
 def stage_train_gat(
     train_df, val_df, le_task, cfg: RunConfig, device, run_dir: str,
-    baseline: Optional[dict] = None,
+    baseline: dict | None = None,
 ):
     train_loader = DataLoader(
         build_graph_data(train_df, causal=cfg.gat_causal),
@@ -258,7 +257,7 @@ def stage_train_gat(
 
 def stage_train_lstm(
     df, train_df, val_df, num_classes, cfg: RunConfig, device, run_dir: str,
-    baseline: Optional[dict] = None,
+    baseline: dict | None = None,
     le_task=None,
 ):
     # The Rust hot path doesn't carry dt targets yet, so it's only
@@ -293,6 +292,10 @@ def stage_train_lstm(
             dt_train = getattr(X_train_pad, "dt_targets", None)
             dt_val = getattr(X_val_pad, "dt_targets", None)
 
+    # Type-annotate as ``torch.nn.Module`` so mypy doesn't widen to the
+    # first branch's concrete class — the two architectures share the
+    # forward(x, seq_len) interface this stage relies on.
+    model: torch.nn.Module
     if cfg.seq_arch == "transformer":
         model = NextActivityTransformer(
             num_classes,

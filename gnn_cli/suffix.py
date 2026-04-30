@@ -26,8 +26,7 @@ Usage::
 
 from __future__ import annotations
 
-import math
-from typing import List, Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 import torch
@@ -50,7 +49,7 @@ def predict_suffix(
     max_steps: int = 20,
     device: torch.device = torch.device("cpu"),
     stop_on_self_loop: bool = True,
-) -> List[Tuple[List[int], float, float, float]]:
+) -> list[tuple[list[int], float, float, float]]:
     """Beam-search rollout from a prefix of task_ids.
 
     Returns a list of up to ``beam`` candidates ordered by joint
@@ -80,12 +79,12 @@ def predict_suffix(
 
     model.eval()
     # Each beam: (seq, log_prob, total_dt_seconds, last_argmax)
-    beams: List[Tuple[List[int], float, float, int]] = [
+    beams: list[tuple[list[int], float, float, int]] = [
         (list(prefix), 0.0, 0.0, -1)
     ]
 
     for _step in range(max_steps):
-        candidates: List[Tuple[List[int], float, float, int]] = []
+        candidates: list[tuple[list[int], float, float, int]] = []
         for seq, logp, dt_total, _last in beams:
             # Tokenizer convention from make_padded_dataset: 0 is pad,
             # task_ids shift by +1.
@@ -98,7 +97,7 @@ def predict_suffix(
             step_dt_seconds = (
                 float(np.expm1(float(dt_pred[0].item()))) if dt_pred is not None else 0.0
             )
-            for lp, idx in zip(top.values.tolist(), top.indices.tolist()):
+            for lp, idx in zip(top.values.tolist(), top.indices.tolist(), strict=True):
                 candidates.append(
                     (seq + [idx], logp + lp, dt_total + step_dt_seconds, idx)
                 )
@@ -116,20 +115,20 @@ def predict_suffix(
 
     # Normalize the surviving-beam log probs so callers get a usable
     # within-beam distribution alongside the raw log probs.
-    log_probs = np.array([b[1] for b in beams], dtype=np.float64)
-    if log_probs.size == 0:
+    beam_logp = np.array([b[1] for b in beams], dtype=np.float64)
+    if beam_logp.size == 0:
         return []
-    log_probs -= log_probs.max()
-    norm = np.exp(log_probs)
+    beam_logp -= beam_logp.max()
+    norm = np.exp(beam_logp)
     norm /= norm.sum()
     return [
         (seq, lp, dt, float(p))
-        for (seq, lp, dt, _), p in zip(beams, norm)
+        for (seq, lp, dt, _), p in zip(beams, norm, strict=True)
     ]
 
 
 def render_suffix_report(
-    completions: List[Tuple[List[int], float, float, float]],
+    completions: list[tuple[list[int], float, float, float]],
     le_task,
     prefix_len: int,
 ) -> str:

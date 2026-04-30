@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Graph Attention Network for next-task prediction.
 
@@ -315,21 +314,13 @@ def bootstrap_ci(
         return (0.0, 0.0)
     rng = np.random.default_rng(seed)
     alpha = (1.0 - confidence) / 2.0
-    samples = []
-    is_2d = hasattr(y_prob_or_pred, "ndim") and y_prob_or_pred.ndim == 2
-    for _ in range(n_resamples):
-        idx = rng.integers(0, n, size=n)
-        if isinstance(y_true, torch.Tensor):
-            yt = y_true[idx]
-        else:
-            yt = y_true[idx]
-        if isinstance(y_prob_or_pred, torch.Tensor):
-            yp = y_prob_or_pred[idx]
-        elif is_2d:
-            yp = y_prob_or_pred[idx]
-        else:
-            yp = y_prob_or_pred[idx]
-        samples.append(float(metric_fn(yt, yp)))
+    # Both torch.Tensor and np.ndarray support fancy-indexing with the
+    # same syntax, so a single indexing path covers both. (The earlier
+    # if/else branches were dead — the bodies were identical.)
+    samples = [
+        float(metric_fn(y_true[idx], y_prob_or_pred[idx]))
+        for idx in (rng.integers(0, n, size=n) for _ in range(n_resamples))
+    ]
     lo = float(np.quantile(samples, alpha))
     hi = float(np.quantile(samples, 1.0 - alpha))
     return lo, hi

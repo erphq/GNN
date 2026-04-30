@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 
 def _fmt_delta(a, b) -> str:
@@ -81,7 +80,7 @@ def _diff_clustering(a: dict, b: dict, lines: list):
 def diff_runs(run_a: str, run_b: str) -> str:
     """Build a markdown report comparing two run directories."""
     a, b = Path(run_a), Path(run_b)
-    lines = [f"# Run diff", f"- A: `{a}`", f"- B: `{b}`", ""]
+    lines = ["# Run diff", f"- A: `{a}`", f"- B: `{b}`", ""]
 
     a_metrics = {p.name for p in (a / "metrics").glob("*.json")}
     b_metrics = {p.name for p in (b / "metrics").glob("*.json")}
@@ -112,7 +111,7 @@ def diff_runs(run_a: str, run_b: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_diff(run_a: str, run_b: str, out_path: Optional[str] = None) -> str:
+def write_diff(run_a: str, run_b: str, out_path: str | None = None) -> str:
     """Convenience wrapper: write report to ``out_path`` if given."""
     report = diff_runs(run_a, run_b)
     if out_path:

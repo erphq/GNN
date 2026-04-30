@@ -18,7 +18,6 @@ process. Surfacing both numbers in every run forces the comparison.
 
 from __future__ import annotations
 
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -38,9 +37,9 @@ def fit_markov(
     train_df: pd.DataFrame,
     cur_col: str = "task_id",
     next_col: str = "next_task",
-) -> Dict[int, int]:
+) -> dict[int, int]:
     """Per current-task lookup: most common next-task seen in training."""
-    table: Dict[int, int] = {}
+    table: dict[int, int] = {}
     for cur, sub in train_df.groupby(cur_col):
         table[int(cur)] = int(sub[next_col].mode().iloc[0])
     return table
@@ -48,7 +47,7 @@ def fit_markov(
 
 def predict_markov(
     val_df: pd.DataFrame,
-    table: Dict[int, int],
+    table: dict[int, int],
     fallback: int,
     cur_col: str = "task_id",
 ) -> np.ndarray:

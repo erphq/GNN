@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Small shared utilities."""
 
@@ -7,7 +6,6 @@ from __future__ import annotations
 
 import os
 import random
-from typing import Optional
 
 import numpy as np
 import torch
@@ -31,7 +29,7 @@ def set_seed(seed: int = 42, deterministic: bool = True) -> None:
         torch.backends.cudnn.benchmark = False
 
 
-def pick_device(prefer: Optional[str] = None) -> torch.device:
+def pick_device(prefer: str | None = None) -> torch.device:
     """Pick the best available torch device, with `prefer` as an override."""
     if prefer:
         return torch.device(prefer)

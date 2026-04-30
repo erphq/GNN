@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Data preprocessing for process mining.
@@ -12,7 +11,7 @@ val subset with the train-fitted scaler (no leakage).
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
@@ -20,7 +19,7 @@ import torch
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, Normalizer
 from torch_geometric.data import Data
 
-DEFAULT_REQUIRED_COLS: Tuple[str, ...] = (
+DEFAULT_REQUIRED_COLS: tuple[str, ...] = (
     "case_id",
     "task_name",
     "timestamp",
@@ -28,7 +27,7 @@ DEFAULT_REQUIRED_COLS: Tuple[str, ...] = (
     "amount",
 )
 
-FEATURE_COLS: Tuple[str, ...] = (
+FEATURE_COLS: tuple[str, ...] = (
     "task_id",
     "resource_id",
     "amount",
@@ -36,12 +35,12 @@ FEATURE_COLS: Tuple[str, ...] = (
     "hour_of_day",
 )
 
-FEAT_OUT_COLS: Tuple[str, ...] = tuple(f"feat_{c}" for c in FEATURE_COLS)
+FEAT_OUT_COLS: tuple[str, ...] = tuple(f"feat_{c}" for c in FEATURE_COLS)
 
 
 def load_and_preprocess_data(
     data_path: str,
-    required_cols: Optional[Sequence[str]] = None,
+    required_cols: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Load a process-mining event log, normalize column names, and sort
     by (case_id, timestamp). Drops rows with unparseable timestamps.
@@ -138,7 +137,7 @@ def _load_xes(data_path: str) -> pd.DataFrame:
 
 def encode_categoricals(
     df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, LabelEncoder, LabelEncoder]:
+) -> tuple[pd.DataFrame, LabelEncoder, LabelEncoder]:
     """Add `task_id`, `resource_id`, `next_task`, and time features.
 
     Encoders are fit on the full dataframe — that is intentional, because
@@ -172,7 +171,7 @@ def encode_categoricals(
 def fit_feature_scaler(
     train_df: pd.DataFrame,
     use_norm_features: bool = True,
-) -> Tuple[object, str]:
+) -> tuple[object, str]:
     """Fit a feature scaler on training rows only.
 
     Returns (fitted_estimator, mode) where mode is 'norm' or 'minmax'. The
@@ -202,7 +201,7 @@ def apply_feature_scaler(
 def create_feature_representation(
     df: pd.DataFrame,
     use_norm_features: bool = True,
-) -> Tuple[pd.DataFrame, LabelEncoder, LabelEncoder]:
+) -> tuple[pd.DataFrame, LabelEncoder, LabelEncoder]:
     """Backwards-compatible one-shot: encode + fit + apply on the same df.
 
     New code should prefer `encode_categoricals` + a case-level split +
@@ -220,7 +219,7 @@ def split_cases(
     val_frac: float = 0.2,
     seed: int = 42,
     mode: str = "case",
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split rows into (train_df, val_df) at the *case* level.
 
     Two modes:
@@ -259,7 +258,7 @@ def split_cases(
     return df.loc[~val_mask].copy(), df.loc[val_mask].copy()
 
 
-def build_graph_data(df: pd.DataFrame, causal: bool = True) -> List[Data]:
+def build_graph_data(df: pd.DataFrame, causal: bool = True) -> list[Data]:
     """Convert a preprocessed event log into one PyG Data object per case.
 
     Each case becomes a graph with one node per event and node features
@@ -282,7 +281,7 @@ def build_graph_data(df: pd.DataFrame, causal: bool = True) -> List[Data]:
       reproducing v0.3 numbers exactly.
     """
     feat_cols = list(FEAT_OUT_COLS)
-    graphs: List[Data] = []
+    graphs: list[Data] = []
     for _cid, cdata in df.groupby("case_id", sort=False):
         cdata = cdata.sort_values("timestamp")
         x = torch.tensor(cdata[feat_cols].values, dtype=torch.float)
@@ -321,6 +320,6 @@ def compute_class_weights(
     present = np.unique(labels)
     if len(present) > 1:
         cw = compute_class_weight("balanced", classes=present, y=labels)
-        for c, w in zip(present, cw):
+        for c, w in zip(present, cw, strict=True):
             weights[c] = float(w)
     return torch.tensor(weights, dtype=torch.float32)

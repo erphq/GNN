@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """LSTM next-activity model.
 
@@ -17,7 +16,6 @@ targets (requires ``dt_log`` column in the input dataframe, which
 from __future__ import annotations
 
 import random
-from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -147,7 +145,7 @@ def train_lstm_model(
     batch_size: int = 64,
     epochs: int = 5,
     model_path: str = "lstm_next_activity.pth",
-    dt_targets: Optional[torch.Tensor] = None,
+    dt_targets: torch.Tensor | None = None,
     time_loss_weight: float = 0.5,
 ):
     """Train the LSTM. When ``dt_targets`` is supplied and the model has
@@ -199,8 +197,8 @@ def evaluate_lstm_model(
     batch_size: int,
     device,
     temperature: float = 1.0,
-    dt_targets: Optional[torch.Tensor] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
+    dt_targets: torch.Tensor | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """Evaluate the LSTM and return (preds, probs).
 
     ``temperature`` divides logits before softmax (use the value

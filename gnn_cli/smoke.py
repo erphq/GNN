@@ -29,11 +29,10 @@ import math
 import os
 import random
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
 
 # Transition table: state -> [(next, probability, mean_wait_minutes)].
 # Probabilities per row sum to 1.0; "END" is a terminal sink.
-TRANSITIONS: Dict[str, List[Tuple[str, float, float]]] = {
+TRANSITIONS: dict[str, list[tuple[str, float, float]]] = {
     "Submit":   [("Review",   1.00,  30)],
     "Review":   [("Approve",  0.70,  60), ("Reject",   0.30,  45)],
     "Approve":  [("Process",  1.00, 120)],
@@ -49,7 +48,7 @@ RESOURCES = ["alice", "bob", "carol", "dave", "erin"]
 MAX_EVENTS_PER_CASE = 30  # safety cap; bounded loops shouldn't hit it
 
 
-def _sample_next(state: str, rng: random.Random) -> Tuple[str, float]:
+def _sample_next(state: str, rng: random.Random) -> tuple[str, float]:
     """Sample (next_task, wait_minutes) from the transition row."""
     row = TRANSITIONS[state]
     r = rng.random()
@@ -76,7 +75,7 @@ def generate_synthetic_csv(
     """Write a Markov-process event log to ``out_path`` and return the path."""
     rng = random.Random(seed)
     base = datetime(2025, 1, 1, 9, 0, 0)
-    rows: List[dict] = []
+    rows: list[dict] = []
 
     for cid in range(num_cases):
         case_id = f"case_{cid:04d}"

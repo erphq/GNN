@@ -24,10 +24,7 @@ deploy-free.
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
-from typing import List, Optional
 
 import torch
 
@@ -35,16 +32,17 @@ try:
     from pydantic import BaseModel, Field
 
     class PredictRequest(BaseModel):
-        prefix: List[str] = Field(..., description="Activity names in order.")
+        prefix: list[str] = Field(..., description="Activity names in order.")
         k: int = Field(3, ge=1, le=50, description="Top-K to return.")
 
     class PredictSuffixRequest(BaseModel):
-        prefix: List[str]
+        prefix: list[str]
         beam: int = Field(5, ge=1, le=20)
         max_steps: int = Field(20, ge=1, le=100)
         stop_on_self_loop: bool = True
 except ImportError:  # pydantic optional — `gnn serve` advertises the install
-    PredictRequest = PredictSuffixRequest = None  # type: ignore[assignment]
+    PredictRequest = None  # type: ignore[misc]
+    PredictSuffixRequest = None  # type: ignore[misc]
 
 
 def build_app(
@@ -97,6 +95,7 @@ def build_app(
             f"--seq-arch {seq_arch} but checkpoint is {arch_from_path}: {model_path}"
         )
 
+    model: torch.nn.Module
     if seq_arch == "transformer":
         model = NextActivityTransformer(
             num_classes, emb_dim=hidden_dim, hidden_dim=hidden_dim,
@@ -124,7 +123,7 @@ def build_app(
         description="Next-event + suffix prediction on event-log prefixes.",
     )
 
-    def _encode_prefix(activities: List[str]) -> List[int]:
+    def _encode_prefix(activities: list[str]) -> list[int]:
         try:
             return [label_to_id[a] for a in activities]
         except KeyError as e:
@@ -132,7 +131,7 @@ def build_app(
                 status_code=400,
                 detail=f"unknown activity: {e.args[0]}; "
                        f"valid labels: {sorted(label_to_id)[:20]}…",
-            )
+            ) from e
 
     @app.get("/health")
     def health():
@@ -163,7 +162,7 @@ def build_app(
         topk = torch.topk(probs, min(req.k, num_classes))
         candidates = [
             {"activity": id_to_label[int(i)], "probability": float(p)}
-            for p, i in zip(topk.values.tolist(), topk.indices.tolist())
+            for p, i in zip(topk.values.tolist(), topk.indices.tolist(), strict=True)
         ]
         return {
             "prefix": req.prefix,
