@@ -145,6 +145,17 @@ when the named acceptance criterion holds.
   shells into Python for ML kernels but owns CLI parsing, config
   loading, scheduling, and artifact management. Same surface as
   today's `gnn` CLI; same outputs byte-for-byte.
+- **v0.8 — GAT v2: heterogeneous graph.** Today's GAT under-performs
+  the LSTM on every dataset we have, but it's the only model that
+  exposes per-event attention (used by `gnn explain`). The honest fix
+  is to expand the graph from "events as nodes" to a heterogeneous
+  graph with **events, resources, and cases as separate node types**
+  with typed edges (event → event chronological, event → resource
+  assigned-to, event → case belongs-to). PyG's `HeteroData` supports
+  it. Acceptance: GAT v2 closes the gap to the LSTM on top-3 / MRR on
+  BPI 2020, AND keeps `gnn explain` working with attention over the
+  richer graph. Until then GAT v1 stays in the codebase as the
+  attention surface; we don't drop it.
 - **v1.0 — Stable.** All of the above, type-clean, deterministic,
   documented, and tagged. Breaking changes after v1.0 require a
   deprecation cycle.

@@ -462,6 +462,31 @@ can tell whether a 1pp difference is signal or noise.
 </details>
 
 <details>
+<summary><b>Rust orchestrator (v0.7 prototype)</b></summary>
+
+`gnn_rs/` is a Rust binary that mirrors the Python `gnn` CLI's
+subcommand surface and shells out to `python -m gnn_cli` for the
+actual ML stages. The point is a single static binary you can drop
+into a Rust / cargo / shell environment without re-implementing the
+orchestration logic.
+
+```bash
+cd gnn_rs && cargo build --release
+target/release/gnn-rs version           # prints both gnn-rs and python versions
+GNN_PYTHON=/path/to/venv/python target/release/gnn-rs smoke
+```
+
+Everything after the subcommand name is forwarded verbatim:
+`gnn-rs run input/log.csv --epochs-lstm 30 ...` is behaviorally
+identical to `gnn run ...`. v0.7 is an explicit *prototype* milestone;
+the v1.0 plan is to incrementally absorb run-dir management, config
+validation, and stage scheduling into Rust while keeping ML kernels
+in Python (see [`gnn_rs/README.md`](./gnn_rs/README.md) for the
+roadmap).
+
+</details>
+
+<details>
 <summary><b>Deploy outside Python — ONNX export</b></summary>
 
 After training, serialize to ONNX so downstream consumers (Rust

@@ -1,0 +1,29 @@
+[package]
+name = "gnn_rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Somesh Misra", "Shashank Dixit"]
+license = "MIT"
+description = "Rust orchestrator prototype for the gnn process-mining CLI (v0.7 milestone)."
+readme = "README.md"
+repository = "https://github.com/erphq/gnn"
+
+[[bin]]
+name = "gnn-rs"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1"
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
