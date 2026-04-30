@@ -4,6 +4,62 @@ All notable changes to this project. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-04-30
+
+Honest scientific framing + richer model surface. The headline change
+is that the README now leads with the metrics where the LSTM
+*dominates* Markov (top-3 +11.7 pp, MRR +0.044, ECE 0.011) instead of
+chasing top-1 — a property of the dataset, not the model. Three
+feature ablations (`--use-resource`, `--use-temporal`) plus a
+cross-seed variance harness confirmed the gap on top-1 is within seed
+noise and not feature-engineerable on BPI 2020.
+
+### Added
+
+- **End-to-end Jupyter tutorial** (`notebooks/01_bpi2020_tutorial.ipynb`)
+  walking the full BPI 2020 workflow: load → analyze → baseline →
+  read pinned metrics → explain → predict-suffix → whatif → diff. The
+  notebook reads `bench/published/bpi2020_lstm/metrics/` so a reader
+  gets the headline numbers in 30 seconds without retraining. Source-
+  of-truth in `notebooks/build.py`.
+- **Resource embedding** in the LSTM (`--use-resource`). Parallel
+  embedding concatenated with the task embedding before the LSTM. No-
+  op on BPI 2020 (only 2 resources) but lands the infrastructure for
+  richer logs.
+- **Cyclic temporal features** (`--use-temporal`). Per-event sin/cos
+  of day-of-week and hour-of-day as continuous LSTM input. Also no-op
+  on BPI 2020 top-1; included for the same infrastructure reasons.
+- **Quantile time head** (`--time-quantiles "0.1,0.5,0.9"`). Replaces
+  the MSE point estimate with a K-output head trained with pinball
+  loss; eval reports interval coverage and width alongside median MAE.
+  "Will finish in 80 h with 80 % confidence" instead of "in 80 h."
+- **Cross-seed variance harness** (`bench/seeds.py`). Runs N seeds in
+  sequence, aggregates per-seed metrics into mean ± std / min / max
+  per leaf metric. The number that tells you whether two leaderboard
+  rows differ meaningfully or just by training noise.
+- **Property tests for the model layer** (`tests/test_properties.py`):
+  top-K accuracy is monotone in K; temperature scaling is argmax-
+  invariant; ECE is in [0, 1]; LSTM forward shape is invariant under
+  feature flags.
+
+### Changed
+
+- README leaderboard reframed: top-3, MRR, ECE, dt MAE as the headline
+  numbers; an honest "what we tried, what didn't help" subsection
+  documents the BPI 2020 feature ablation.
+- README CLI section now documents every v0.4+ flag and the non-`run`
+  subcommands (`baseline`, `explain`, `predict-suffix`, `whatif`,
+  `diff`, `serve`) plus the `bench/seeds.py` cross-seed harness.
+
+### Notes
+
+- No backwards-incompatible changes. Every new flag defaults to off /
+  empty / no-op so existing callers (predict-suffix, serve, the canary)
+  are unaffected.
+- The cross-seed sweep on BPI 2020 (5 × 30 epochs) lands the canonical
+  variance numbers under `bench/published/bpi2020_lstm_seeds/` —
+  pinned for reproducibility once the sweep completes.
+
 ## [0.4.0] — 2026-04-29
 
 Reproducibility, baselines, and ergonomics. Every accuracy number now

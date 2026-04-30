@@ -1,6 +1,6 @@
 [project]
 name = "gnn-process-mining"
-version = "0.4.0"
+version = "0.4.1"
 description = "Process mining with Graph Neural Networks, LSTMs, and tabular RL."
 readme = "README.md"
 license = { file = "LICENSE" }
