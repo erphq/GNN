@@ -13,7 +13,7 @@ One CLI, one event log, six questions answered.
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](#install)
 [![rust](https://img.shields.io/badge/rust-stable-orange.svg)](./pm_fast)
-[![tests](https://img.shields.io/badge/tests-24%20passing-brightgreen.svg)](./tests)
+[![tests](https://img.shields.io/badge/tests-110%20passing-brightgreen.svg)](./tests)
 [![release](https://img.shields.io/github/v/release/erphq/gnn?display_name=tag)](https://github.com/erphq/gnn/releases)
 
 </div>
