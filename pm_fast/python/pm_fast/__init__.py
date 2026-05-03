@@ -6,8 +6,6 @@ The wrappers handle pandas → numpy conversion so callers can pass dataframes.
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 import pandas as pd
 
@@ -34,7 +32,7 @@ def build_task_adjacency(df: pd.DataFrame, num_tasks: int) -> np.ndarray:
 
 def build_padded_prefixes(
     df: pd.DataFrame,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
     """Replacement for `_build_prefixes` + `make_padded_dataset` fused.
 
     Expects `df` sorted by (case_id, timestamp). Returns

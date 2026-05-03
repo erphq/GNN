@@ -56,7 +56,7 @@ class _ArchMeta:
     max_seq_len: int
 
     @classmethod
-    def from_run_dir(cls, run_dir: Path) -> "_ArchMeta":
+    def from_run_dir(cls, run_dir: Path) -> _ArchMeta:
         candidates = [
             run_dir / "models" / "lstm_arch.json",
             run_dir / "models" / "transformer_arch.json",
