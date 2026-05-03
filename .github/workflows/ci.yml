@@ -50,6 +50,7 @@ jobs:
             plotly \
             pm4py \
             pytest \
+            hypothesis \
             maturin
           pip install -e .
       - name: build pm_fast (Rust hot-path extension)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Visualization module for process mining analysis
@@ -69,9 +68,14 @@ def plot_process_flow(bottleneck_stats, le_task, top_bottlenecks,
         dst = int(row["next_task_id"])
         G_flow.add_edge(src, dst, freq=int(row["count"]), mean_hours=row["mean_hours"])
     
-    btop_edges = set((int(src), int(dst)) for src, dst in zip(
-        top_bottlenecks["task_id"], top_bottlenecks["next_task_id"]
-    ))
+    btop_edges = set(
+        (int(src), int(dst))
+        for src, dst in zip(
+            top_bottlenecks["task_id"],
+            top_bottlenecks["next_task_id"],
+            strict=True,
+        )
+    )
     
     edge_cols, edge_wids = [], []
     for (u,v) in G_flow.edges():

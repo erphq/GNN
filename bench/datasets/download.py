@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict, NamedTuple
+from typing import NamedTuple
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -42,7 +42,7 @@ class Dataset(NamedTuple):
 # Curated subset of public process-mining benchmarks. ``landing_url``
 # points to the 4TU dataset landing page where the XES download lives
 # behind the terms-of-use button.
-REGISTRY: Dict[str, Dataset] = {
+REGISTRY: dict[str, Dataset] = {
     "bpi_2020_domestic": Dataset(
         name="bpi_2020_domestic",
         landing_url="https://data.4tu.nl/articles/dataset/BPI_Challenge_2020_Domestic_Declarations/12692543",

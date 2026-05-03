@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _resolve_run_dir(p: str) -> Path:
@@ -38,13 +37,13 @@ def _read(run_dir: Path, fname: str) -> dict:
     return json.loads(f.read_text()) if f.exists() else {}
 
 
-def _fmt_pct(x: Optional[float], digits: int = 1) -> str:
+def _fmt_pct(x: float | None, digits: int = 1) -> str:
     if x is None:
         return "—"
     return f"{x * 100:.{digits}f}%"
 
 
-def _fmt(x: Optional[float], digits: int = 3) -> str:
+def _fmt(x: float | None, digits: int = 3) -> str:
     if x is None:
         return "—"
     return f"{x:.{digits}f}"
@@ -79,9 +78,9 @@ def _row(name: str, run_dir: Path) -> dict:
     }
 
 
-def render_leaderboard(rows: List[dict]) -> str:
+def render_leaderboard(rows: list[dict]) -> str:
     """Two stacked tables: predictive metrics + process-mining metrics."""
-    out: List[str] = []
+    out: list[str] = []
     out.append("### Predictive performance")
     out.append("")
     out.append(

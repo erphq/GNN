@@ -29,17 +29,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import statistics
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
-def _flatten(d: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+def _flatten(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
     """Flatten nested dicts to dotted-path leaves; skip lists."""
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for k, v in d.items():
         key = f"{prefix}.{k}" if prefix else k
         if isinstance(v, dict):
@@ -49,7 +48,7 @@ def _flatten(d: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
     return out
 
 
-def _aggregate(per_seed: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _aggregate(per_seed: list[dict[str, Any]]) -> dict[str, Any]:
     """For each numeric leaf metric present in *every* run, compute
     mean / std / min / max / N. Skip metrics that vary in presence."""
     if not per_seed:
@@ -59,7 +58,7 @@ def _aggregate(per_seed: List[Dict[str, Any]]) -> Dict[str, Any]:
     for f in flats[1:]:
         common_keys &= set(f.keys())
 
-    summary: Dict[str, Any] = {}
+    summary: dict[str, Any] = {}
     for key in sorted(common_keys):
         values = [f[key] for f in flats]
         if not all(isinstance(v, (int, float)) for v in values):
@@ -77,7 +76,7 @@ def _aggregate(per_seed: List[Dict[str, Any]]) -> Dict[str, Any]:
     return summary
 
 
-def _run_one(csv: str, seed: int, out_root: Path, passthrough: List[str]) -> Path:
+def _run_one(csv: str, seed: int, out_root: Path, passthrough: list[str]) -> Path:
     """Run ``gnn run`` for one seed; return the run_<ts>/ dir."""
     out_dir = out_root / f"seed_{seed}"
     cmd = [
@@ -94,7 +93,7 @@ def _run_one(csv: str, seed: int, out_root: Path, passthrough: List[str]) -> Pat
     return runs[-1]
 
 
-def _collect_metrics(run_dir: Path) -> Dict[str, Dict[str, Any]]:
+def _collect_metrics(run_dir: Path) -> dict[str, dict[str, Any]]:
     """Read every metrics/*.json and tag by filename."""
     out = {}
     for path in (run_dir / "metrics").glob("*.json"):
@@ -137,13 +136,13 @@ def main() -> int:
     print(f"  out_root:   {out_root}")
     print(f"  passthrough: {' '.join(passthrough)}")
 
-    per_file_per_seed: Dict[str, List[Dict[str, Any]]] = {}
+    per_file_per_seed: dict[str, list[dict[str, Any]]] = {}
     for seed in args.seeds:
         run_dir = _run_one(args.csv, seed, out_root, passthrough)
         for fname, payload in _collect_metrics(run_dir).items():
             per_file_per_seed.setdefault(fname, []).append(payload)
 
-    aggregate: Dict[str, Dict[str, Any]] = {}
+    aggregate: dict[str, dict[str, Any]] = {}
     for fname, runs in per_file_per_seed.items():
         aggregate[fname] = _aggregate(runs)
 

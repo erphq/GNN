@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List, Tuple
 
 # Cells: list of (cell_type, source). cell_type is "markdown" or "code".
-CELLS: List[Tuple[str, str]] = [
+CELLS: list[tuple[str, str]] = [
     ("markdown", """\
 # Tutorial — process mining with BPI 2020, end to end
 
