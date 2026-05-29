@@ -669,11 +669,14 @@ and toggles `cudnn.deterministic`. Always call it — never reach for
 pytest -q
 ```
 
-24 tests covering preprocessing, splits, scaler fit/apply, both model
+110 tests covering preprocessing, splits, scaler fit/apply, both model
 forward + backward passes (node-level **and** legacy graph-level), the
 RL env contract, a known-bipartite-graph regression for spectral
-clustering, and a parity test for the Rust kernels. Synthetic
-event-log fixture in `tests/conftest.py`; no external data needed.
+clustering, a parity test for the Rust kernels, the CLI surface,
+baselines, calibration/ECE properties, the smoke canary, dataset-drift
+gates, ONNX export drift, and the `diff` / `explain` / `predict-suffix`
+/ `whatif` / `serve` subcommands. Synthetic event-log fixture in
+`tests/conftest.py`; no external data needed.
 
 CI matrix: Python `3.10` / `3.11` × `{lint, test, rust}`.
 
@@ -797,6 +800,6 @@ MIT — see [LICENSE](./LICENSE).
 
 <div align="center">
 <sub>
-Built with care in San Francisco · Audited twice · 24 tests, two CI workflows, one CLI
+Built with care in San Francisco · Audited twice · 110 tests, two CI workflows, one CLI
 </sub>
 </div>
